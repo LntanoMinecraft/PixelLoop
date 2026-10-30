@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.GifCreationEntity
 import com.example.data.GifRepository
+import com.example.data.ScreenRecordingEntity
 import com.example.data.ThemeMode
 import com.example.data.ThemePreferences
 import com.example.engine.BatchQueueManager
@@ -20,6 +21,7 @@ import com.example.engine.VideoSourceMetadata
 import com.example.service.LiveRecordingState
 import com.example.service.LiveUpdateNotificationHelper
 import com.example.service.ScreenRecordService
+import com.example.ui.components.formatFileSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,6 +105,9 @@ class StudioViewModel(
     val allCreations: StateFlow<List<GifCreationEntity>> = repository.allCreations
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allRecordings: StateFlow<List<ScreenRecordingEntity>> = repository.allRecordings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val themePreferences: StateFlow<ThemePreferences> = repository.themePreferences
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences())
 
@@ -110,16 +115,22 @@ class StudioViewModel(
     private var scrubJob: Job? = null
 
     init {
-        // Observe finished screen recordings from ScreenRecordService and auto-open in Editor
+        // Observe finished screen recordings from ScreenRecordService, register in Works Library, and auto-open in Editor
         viewModelScope.launch {
             ScreenRecordService.recordingState.collect { recState ->
                 recState.latestRecordedFile?.let { file ->
                     if (file.exists()) {
                         ScreenRecordService.clearConsumedRecording()
+                        val recTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
+                        repository.registerScreenRecordingFile(
+                            videoFile = file,
+                            frameProcessor = frameProcessor,
+                            suggestedTitle = recTitle
+                        )
                         loadVideoFromUri(
                             uri = Uri.fromFile(file),
                             sourceType = "SCREEN_RECORD",
-                            suggestedTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
+                            suggestedTitle = recTitle
                         )
                         _currentTab.value = StudioTab.EDITOR
                     }
@@ -130,13 +141,14 @@ class StudioViewModel(
             }
         }
 
-        // Remove any legacy auto-generated sample GIF from previous installs
+        // Sync existing screen recordings on disk into the Works Library & clean legacy sample GIF
         viewModelScope.launch {
             runCatching {
                 val items = repository.allCreations.first()
                 items.filter { it.filePath.endsWith("PixelLoop_Starter_Expressive.gif") }
                     .forEach { repository.deleteCreation(it) }
             }
+            repository.syncRecordingsDirectory(frameProcessor)
         }
     }
 
@@ -194,6 +206,20 @@ class StudioViewModel(
                     isPlayingPreview = false,
                     encodingState = EncodingProgressState.Idle
                 )
+            }
+
+            // If loading an in-app screen recording file, ensure it is indexed in Works Library
+            if (sourceType == "SCREEN_RECORD" && uri.scheme == "file") {
+                uri.path?.let { path ->
+                    val recFile = File(path)
+                    if (recFile.exists()) {
+                        repository.registerScreenRecordingFile(
+                            videoFile = recFile,
+                            frameProcessor = frameProcessor,
+                            suggestedTitle = suggestedTitle
+                        )
+                    }
+                }
             }
 
             val metaResult = frameProcessor.inspectVideo(uri, sourceType, suggestedTitle)
@@ -467,6 +493,49 @@ class StudioViewModel(
         viewModelScope.launch {
             repository.deleteCreation(entity)
             _toastMessage.value = "已删除 ${entity.title}"
+        }
+    }
+
+    fun reloadScreenRecordingToEditor(recording: ScreenRecordingEntity) {
+        val file = File(recording.videoFilePath)
+        if (!file.exists()) {
+            viewModelScope.launch {
+                repository.deleteScreenRecording(recording)
+                _toastMessage.value = "录屏原片文件已不存在，已清理记录"
+            }
+            return
+        }
+        loadVideoFromUri(
+            uri = Uri.fromFile(file),
+            sourceType = "SCREEN_RECORD",
+            suggestedTitle = "${recording.title}_新剪辑"
+        )
+        _toastMessage.value = "已载入录屏原片「${recording.title}」，可重新裁剪导出"
+    }
+
+    fun enqueueScreenRecordingToQueue(recording: ScreenRecordingEntity) {
+        val file = File(recording.videoFilePath)
+        if (!file.exists()) {
+            viewModelScope.launch {
+                repository.deleteScreenRecording(recording)
+                _toastMessage.value = "录屏原片文件已不存在，已清理记录"
+            }
+            return
+        }
+        enqueueVideosToBatchQueue(listOf(Uri.fromFile(file)))
+    }
+
+    fun deleteScreenRecording(recording: ScreenRecordingEntity) {
+        viewModelScope.launch {
+            repository.deleteScreenRecording(recording)
+            _toastMessage.value = "已删除录屏原片「${recording.title}」，释放 ${formatFileSize(recording.fileSizeBytes)}"
+        }
+    }
+
+    fun clearAllScreenRecordings() {
+        viewModelScope.launch {
+            val freed = repository.deleteAllScreenRecordings()
+            _toastMessage.value = "已清空全部录屏原片，释放 ${formatFileSize(freed)} 存储空间"
         }
     }
 

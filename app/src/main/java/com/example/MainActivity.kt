@@ -115,6 +115,7 @@ fun PixelLoopAppRoot(
     val editorState by studioViewModel.editorState.collectAsStateWithLifecycle()
     val queueState by studioViewModel.queueState.collectAsStateWithLifecycle()
     val allCreations by studioViewModel.allCreations.collectAsStateWithLifecycle()
+    val allRecordings by studioViewModel.allRecordings.collectAsStateWithLifecycle()
     val themePrefs by studioViewModel.themePreferences.collectAsStateWithLifecycle()
     val countdownValue by studioViewModel.countdownSeconds.collectAsStateWithLifecycle()
     val liveRecordingState by studioViewModel.liveRecordingState.collectAsStateWithLifecycle()
@@ -322,9 +323,14 @@ fun PixelLoopAppRoot(
                         StudioTab.GALLERY -> {
                             GalleryScreen(
                                 creations = allCreations,
+                                recordings = allRecordings,
                                 onShareCreation = studioViewModel::shareGif,
                                 onSaveToSystemGallery = studioViewModel::saveGifToSystemGallery,
                                 onDeleteCreation = studioViewModel::deleteCreation,
+                                onReloadRecordingToEditor = studioViewModel::reloadScreenRecordingToEditor,
+                                onEnqueueRecordingToQueue = studioViewModel::enqueueScreenRecordingToQueue,
+                                onDeleteRecording = studioViewModel::deleteScreenRecording,
+                                onClearAllRecordings = studioViewModel::clearAllScreenRecordings,
                                 onGoToHome = { studioViewModel.selectTab(StudioTab.HOME) }
                             )
                         }
@@ -337,7 +343,7 @@ fun PixelLoopAppRoot(
                     ExpressiveNavigationRail(
                         currentTab = currentTab,
                         queueCount = queueState.activeBadgeCount,
-                        galleryCount = allCreations.size,
+                        galleryCount = allCreations.size + allRecordings.size,
                         onSelectTab = studioViewModel::selectTab
                     )
                     mainScreenContent(Modifier.weight(1f).fillMaxSize())
@@ -350,7 +356,7 @@ fun PixelLoopAppRoot(
                     ExpressiveFloatingNavBar(
                         currentTab = currentTab,
                         queueCount = queueState.activeBadgeCount,
-                        galleryCount = allCreations.size,
+                        galleryCount = allCreations.size + allRecordings.size,
                         onSelectTab = studioViewModel::selectTab,
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
