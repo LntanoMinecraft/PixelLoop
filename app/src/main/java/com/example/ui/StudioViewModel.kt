@@ -2,20 +2,17 @@ package com.example.ui
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.GifCreationEntity
 import com.example.data.GifRepository
+import com.example.data.ThemeMode
 import com.example.data.ThemePreferences
-import com.example.engine.AnimatedGifEncoder
+import com.example.engine.BatchQueueManager
+import com.example.engine.BatchQueueUiState
 import com.example.engine.CropAspectPreset
-import com.example.engine.DemoVideoGenerator
 import com.example.engine.NormalizedCropRect
 import com.example.engine.ResolutionPreset
 import com.example.engine.VideoFrameProcessor
@@ -23,7 +20,6 @@ import com.example.engine.VideoSourceMetadata
 import com.example.service.LiveRecordingState
 import com.example.service.LiveUpdateNotificationHelper
 import com.example.service.ScreenRecordService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,9 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -45,6 +39,7 @@ import kotlin.math.roundToInt
 enum class StudioTab {
     HOME,
     EDITOR,
+    QUEUE,
     GALLERY
 }
 
@@ -66,7 +61,7 @@ data class GifEditorUiState(
     val trimEndMs: Long = 4000L,
     val cropRect: NormalizedCropRect = NormalizedCropRect(),
     val aspectPreset: CropAspectPreset = CropAspectPreset.FREE,
-    val targetFps: Int = 12,
+    val targetFps: Int = 15,
     val resolutionPreset: ResolutionPreset = ResolutionPreset.RES_480P,
     val playbackSpeed: Float = 1.0f,
     val outputWidth: Int = 480,
@@ -74,7 +69,7 @@ data class GifEditorUiState(
     val estimatedFrameCount: Int = 48,
     val estimatedSizeBytes: Long = 520_000L,
     val encodingState: EncodingProgressState = EncodingProgressState.Idle,
-    val customTitle: String = "灵动帧作品"
+    val customTitle: String = "GIF"
 )
 
 class StudioViewModel(
@@ -83,20 +78,25 @@ class StudioViewModel(
     private val frameProcessor: VideoFrameProcessor
 ) : ViewModel() {
 
+    private val batchQueueManager = BatchQueueManager(
+        appContext = appContext,
+        repository = repository,
+        frameProcessor = frameProcessor
+    )
+
     private val _currentTab = MutableStateFlow(StudioTab.HOME)
     val currentTab: StateFlow<StudioTab> = _currentTab.asStateFlow()
 
     private val _editorState = MutableStateFlow(GifEditorUiState())
     val editorState: StateFlow<GifEditorUiState> = _editorState.asStateFlow()
 
+    val queueState: StateFlow<BatchQueueUiState> = batchQueueManager.queueState
+
     private val _countdownSeconds = MutableStateFlow<Int?>(null)
     val countdownSeconds: StateFlow<Int?> = _countdownSeconds.asStateFlow()
 
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
-
-    private val _simulatedLiveRecordSeconds = MutableStateFlow<Int?>(null)
-    val simulatedLiveRecordSeconds: StateFlow<Int?> = _simulatedLiveRecordSeconds.asStateFlow()
 
     val liveRecordingState: StateFlow<LiveRecordingState> = ScreenRecordService.recordingState
 
@@ -107,7 +107,6 @@ class StudioViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences())
 
     private var previewPlaybackJob: Job? = null
-    private var simulatedRecordJob: Job? = null
     private var scrubJob: Job? = null
 
     init {
@@ -120,7 +119,7 @@ class StudioViewModel(
                         loadVideoFromUri(
                             uri = Uri.fromFile(file),
                             sourceType = "SCREEN_RECORD",
-                            suggestedTitle = "屏幕录制_${file.nameWithoutExtension.takeLast(4)}"
+                            suggestedTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
                         )
                         _currentTab.value = StudioTab.EDITOR
                     }
@@ -131,14 +130,22 @@ class StudioViewModel(
             }
         }
 
-        // Seed a showcase animated GIF in the local library if the database is completely empty
+        // Remove any legacy auto-generated sample GIF from previous installs
         viewModelScope.launch {
-            seedStarterCreationIfEmpty()
+            runCatching {
+                val items = repository.allCreations.first()
+                items.filter { it.filePath.endsWith("PixelLoop_Starter_Expressive.gif") }
+                    .forEach { repository.deleteCreation(it) }
+            }
         }
     }
 
     fun selectTab(tab: StudioTab) {
         _currentTab.value = tab
+    }
+
+    fun showToast(message: String) {
+        _toastMessage.value = message
     }
 
     fun clearToast() {
@@ -151,15 +158,17 @@ class StudioViewModel(
         }
     }
 
-    fun toggleDarkMode(enabled: Boolean) {
+    fun cycleThemeMode() {
+        val next = when (themePreferences.value.themeMode) {
+            ThemeMode.SYSTEM -> ThemeMode.LIGHT
+            ThemeMode.LIGHT -> ThemeMode.DARK
+            ThemeMode.DARK -> ThemeMode.SYSTEM
+        }
         viewModelScope.launch {
-            repository.setDarkMode(enabled)
+            repository.setThemeMode(next)
         }
     }
 
-    /**
-     * Runs a 3-2-1 expressive spring countdown before invoking [onCountdownFinished].
-     */
     fun startRecordCountdown(onCountdownFinished: () -> Unit) {
         if (_countdownSeconds.value != null) return
         viewModelScope.launch {
@@ -172,51 +181,10 @@ class StudioViewModel(
         }
     }
 
-    /**
-     * Starts an interactive Android 16 Live Update notification recording flow that posts the real
-     * Android 16 ProgressStyle + setRequestPromotedOngoing + setShortCriticalText notification
-     * and records an expressive screen capture stream so users can also test notification actions directly.
-     */
-    fun startLiveNotificationCaptureDemo() {
-        simulatedRecordJob?.cancel()
-        simulatedRecordJob = viewModelScope.launch {
-            var elapsed = 0
-            _simulatedLiveRecordSeconds.value = 0
-            runCatching {
-                val notif = LiveUpdateNotificationHelper.buildRecordingLiveNotification(appContext, 0)
-                androidx.core.app.NotificationManagerCompat.from(appContext)
-                    .notify(LiveUpdateNotificationHelper.NOTIFICATION_ID_RECORDING, notif)
-            }
-            while (isActive && _simulatedLiveRecordSeconds.value != null) {
-                delay(1000L)
-                elapsed++
-                _simulatedLiveRecordSeconds.value = elapsed
-                runCatching {
-                    val notif = LiveUpdateNotificationHelper.buildRecordingLiveNotification(appContext, elapsed)
-                    androidx.core.app.NotificationManagerCompat.from(appContext)
-                        .notify(LiveUpdateNotificationHelper.NOTIFICATION_ID_RECORDING, notif)
-                }
-            }
-        }
-    }
-
-    fun stopLiveNotificationCaptureAndEdit() {
-        simulatedRecordJob?.cancel()
-        _simulatedLiveRecordSeconds.value = null
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(appContext)
-                .cancel(LiveUpdateNotificationHelper.NOTIFICATION_ID_RECORDING)
-        }
-        loadOrGenerateDemoVideo(sourceType = "SCREEN_RECORD", customTitle = "实时录屏捕获_${System.currentTimeMillis() % 1000}")
-    }
-
-    /**
-     * Loads a local or picked MP4 video URI into the GIF Studio Editor.
-     */
     fun loadVideoFromUri(
         uri: Uri,
         sourceType: String = "VIDEO_IMPORT",
-        suggestedTitle: String = "MP4转GIF_${System.currentTimeMillis() % 1000}"
+        suggestedTitle: String = "GIF_${System.currentTimeMillis() % 10000}"
     ) {
         previewPlaybackJob?.cancel()
         viewModelScope.launch {
@@ -266,29 +234,6 @@ class StudioViewModel(
         }
     }
 
-    /**
-     * Generates a real 4-second 24fps MP4 clip on device and loads it into the Editor.
-     */
-    fun loadOrGenerateDemoVideo(
-        sourceType: String = "VIDEO_IMPORT",
-        customTitle: String = "灵动几何演示片段"
-    ) {
-        viewModelScope.launch {
-            _editorState.update { it.copy(isLoadingVideo = true) }
-            val result = DemoVideoGenerator.generateExpressiveDemoMp4(appContext)
-            result.onSuccess { mp4File ->
-                loadVideoFromUri(
-                    uri = Uri.fromFile(mp4File),
-                    sourceType = sourceType,
-                    suggestedTitle = customTitle
-                )
-            }.onFailure { err ->
-                _editorState.update { it.copy(isLoadingVideo = false) }
-                _toastMessage.value = "生成演示视频失败: ${err.localizedMessage}"
-            }
-        }
-    }
-
     fun updateTrimRange(newStartMs: Long, newEndMs: Long) {
         val meta = _editorState.value.videoMetadata ?: return
         val clampedStart = newStartMs.coerceIn(0L, max(0L, meta.durationMs - 300L))
@@ -330,12 +275,10 @@ class StudioViewModel(
         } else {
             val videoAspect = srcW / srcH
             if (targetRatio > videoAspect) {
-                // Wider than video: full width, centered vertical crop
                 val normH = (videoAspect / targetRatio).coerceIn(0.2f, 1f)
                 val padY = (1f - normH) / 2f
                 NormalizedCropRect(0f, padY, 1f, 1f - padY)
             } else {
-                // Taller than video: full height, centered horizontal crop
                 val normW = (targetRatio / videoAspect).coerceIn(0.2f, 1f)
                 val padX = (1f - normW) / 2f
                 NormalizedCropRect(padX, 0f, 1f - padX, 1f)
@@ -423,9 +366,6 @@ class StudioViewModel(
         }
     }
 
-    /**
-     * Executes the end-to-end video-to-GIF export pipeline and saves the creation in Room.
-     */
     fun exportCurrentVideoToGif() {
         val state = _editorState.value
         val meta = state.videoMetadata ?: return
@@ -470,7 +410,7 @@ class StudioViewModel(
 
             exportResult.onSuccess { res ->
                 val entity = GifCreationEntity(
-                    title = state.customTitle.ifBlank { "灵动帧_${System.currentTimeMillis() % 1000}" },
+                    title = state.customTitle.ifBlank { "GIF_${System.currentTimeMillis() % 1000}" },
                     filePath = res.gifFile.absolutePath,
                     thumbnailPath = res.thumbnailFile.absolutePath,
                     width = res.outputWidth,
@@ -493,7 +433,7 @@ class StudioViewModel(
                 _editorState.update {
                     it.copy(
                         encodingState = EncodingProgressState.Error(
-                            err.localizedMessage ?: "编码过程中发生错误"
+                            err.localizedMessage ?: "导出失败"
                         )
                     )
                 }
@@ -526,8 +466,73 @@ class StudioViewModel(
     fun deleteCreation(entity: GifCreationEntity) {
         viewModelScope.launch {
             repository.deleteCreation(entity)
-            _toastMessage.value = "已从作品库删除 ${entity.title}"
+            _toastMessage.value = "已删除 ${entity.title}"
         }
+    }
+
+    fun enqueueVideosToBatchQueue(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        batchQueueManager.enqueueMultipleVideos(uris) { addedCount ->
+            if (addedCount > 0) {
+                _toastMessage.value = "已将 $addedCount 个视频加入后台队列"
+                _currentTab.value = StudioTab.QUEUE
+            } else {
+                _toastMessage.value = "未能读取所选视频文件"
+            }
+        }
+    }
+
+    fun enqueueCurrentEditorVideoToQueue() {
+        val state = _editorState.value
+        val meta = state.videoMetadata ?: return
+        previewPlaybackJob?.cancel()
+        _editorState.update { it.copy(isPlayingPreview = false) }
+
+        batchQueueManager.enqueueConfiguredTask(
+            metadata = meta.copy(displayName = state.customTitle.ifBlank { meta.displayName }),
+            thumbnail = state.currentPreviewBitmap,
+            trimStartMs = state.trimStartMs,
+            trimEndMs = state.trimEndMs,
+            cropRect = state.cropRect,
+            aspectPreset = state.aspectPreset,
+            targetFps = state.targetFps,
+            resolutionPreset = state.resolutionPreset,
+            playbackSpeed = state.playbackSpeed
+        )
+        _toastMessage.value = "已加入后台转码队列"
+        _currentTab.value = StudioTab.QUEUE
+    }
+
+    fun toggleQueuePauseResume() {
+        batchQueueManager.togglePauseResume()
+    }
+
+    fun moveQueueTaskUp(taskId: String) {
+        batchQueueManager.moveTaskUp(taskId)
+    }
+
+    fun removeQueueTask(taskId: String) {
+        batchQueueManager.removeTask(taskId)
+    }
+
+    fun retryQueueTask(taskId: String) {
+        batchQueueManager.retryTask(taskId)
+    }
+
+    fun clearCompletedQueueTasks() {
+        batchQueueManager.clearCompletedTasks()
+    }
+
+    fun updateBatchQueueFps(fps: Int) {
+        batchQueueManager.updateBatchConfig(fps = fps)
+    }
+
+    fun updateBatchQueueResolution(preset: ResolutionPreset) {
+        batchQueueManager.updateBatchConfig(resolution = preset)
+    }
+
+    fun updateBatchQueueSpeed(speed: Float) {
+        batchQueueManager.updateBatchConfig(speed = speed)
     }
 
     private fun recalculateEstimates(state: GifEditorUiState): GifEditorUiState {
@@ -552,55 +557,6 @@ class StudioViewModel(
             estimatedFrameCount = frameCount,
             estimatedSizeBytes = estimatedBytes
         )
-    }
-
-    private suspend fun seedStarterCreationIfEmpty() = withContext(Dispatchers.IO) {
-        runCatching {
-            val existing = repository.allCreations.first()
-            if (existing.isNotEmpty()) return@withContext
-
-            val gifsDir = File(appContext.filesDir, "gifs").apply { mkdirs() }
-            val starterGif = File(gifsDir, "PixelLoop_Starter_Expressive.gif")
-            val starterThumb = File(gifsDir, "PixelLoop_Starter_Thumb.png")
-            val w = 320
-            val h = 320
-            val frames = 16
-
-            FileOutputStream(starterGif).use { fos ->
-                val encoder = AnimatedGifEncoder(fos)
-                encoder.start(w, h, loopCount = 0)
-                for (i in 0 until frames) {
-                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bmp)
-                    DemoVideoGenerator.drawExpressiveShowcaseFrame(canvas, w, h, i, frames)
-                    if (i == 0) {
-                        FileOutputStream(starterThumb).use { thumbOut ->
-                            bmp.compress(Bitmap.CompressFormat.PNG, 90, thumbOut)
-                        }
-                    }
-                    encoder.addFrame(bmp, 8)
-                    bmp.recycle()
-                }
-                encoder.finish()
-            }
-
-            repository.saveCreation(
-                GifCreationEntity(
-                    title = "M3 Expressive 灵动示例",
-                    filePath = starterGif.absolutePath,
-                    thumbnailPath = starterThumb.absolutePath,
-                    width = w,
-                    height = h,
-                    fps = 12,
-                    durationMs = 1280L,
-                    frameCount = frames,
-                    fileSizeBytes = starterGif.length(),
-                    sourceType = "SCREEN_RECORD",
-                    cropRatioLabel = "1:1 方形",
-                    playbackSpeed = 1.0f
-                )
-            )
-        }
     }
 
     class Factory(

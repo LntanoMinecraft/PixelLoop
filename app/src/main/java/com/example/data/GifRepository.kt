@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.R
 import kotlinx.coroutines.Dispatchers
@@ -19,9 +20,15 @@ import java.io.File
 
 private val Context.dataStore by preferencesDataStore(name = "pixelloop_prefs")
 
+enum class ThemeMode(val label: String) {
+    SYSTEM("跟随系统"),
+    LIGHT("浅色"),
+    DARK("深色")
+}
+
 data class ThemePreferences(
     val useDynamicColor: Boolean = true,
-    val useDarkMode: Boolean = true
+    val themeMode: ThemeMode = ThemeMode.SYSTEM
 )
 
 class GifRepository(
@@ -29,14 +36,16 @@ class GifRepository(
     private val gifDao: GifDao
 ) {
     private val dynamicColorKey = booleanPreferencesKey("use_dynamic_color")
-    private val darkModeKey = booleanPreferencesKey("use_dark_mode")
+    private val themeModeKey = stringPreferencesKey("theme_mode_v2")
 
     val allCreations: Flow<List<GifCreationEntity>> = gifDao.observeAllCreations()
 
     val themePreferences: Flow<ThemePreferences> = context.dataStore.data.map { prefs ->
+        val modeStr = prefs[themeModeKey] ?: ThemeMode.SYSTEM.name
+        val mode = runCatching { ThemeMode.valueOf(modeStr) }.getOrDefault(ThemeMode.SYSTEM)
         ThemePreferences(
             useDynamicColor = prefs[dynamicColorKey] ?: true,
-            useDarkMode = prefs[darkModeKey] ?: true
+            themeMode = mode
         )
     }
 
@@ -44,8 +53,8 @@ class GifRepository(
         context.dataStore.edit { it[dynamicColorKey] = enabled }
     }
 
-    suspend fun setDarkMode(enabled: Boolean) {
-        context.dataStore.edit { it[darkModeKey] = enabled }
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { it[themeModeKey] = mode.name }
     }
 
     suspend fun saveCreation(entity: GifCreationEntity): Long {
@@ -62,10 +71,6 @@ class GifRepository(
         gifDao.deleteById(entity.id)
     }
 
-    /**
-     * Exports the local GIF file into the device's public Pictures/PixelLoop album via MediaStore
-     * without requiring broad storage permissions.
-     */
     suspend fun exportGifToSystemGallery(entity: GifCreationEntity): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -113,9 +118,6 @@ class GifRepository(
             }
         }
 
-    /**
-     * Launches the system social sharing sheet for the given GIF file using FileProvider.
-     */
     fun shareGifToSocial(entity: GifCreationEntity): Result<Unit> {
         return runCatching {
             val file = File(entity.filePath)
@@ -126,10 +128,6 @@ class GifRepository(
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/gif"
                 putExtra(Intent.EXTRA_STREAM, contentUri)
-                putExtra(
-                    Intent.EXTRA_TEXT,
-                    "${entity.title} (${entity.width}x${entity.height} · ${entity.fps} FPS)"
-                )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 

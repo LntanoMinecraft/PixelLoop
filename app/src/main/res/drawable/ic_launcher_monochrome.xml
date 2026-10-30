@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pure Alpha Silhouette with Even-Odd Cutout for Android 13-16 Native Themed Icons -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M42,30 L66,30 C72.63,30 78,35.37 78,42 L78,66 C78,72.63 72.63,78 66,78 L42,78 C35.37,78 30,72.63 30,66 L30,42 C30,35.37 35.37,30 42,30 Z M43,36 C39.13,36 36,39.13 36,43 L36,65 C36,68.87 39.13,72 43,72 L65,72 C68.87,72 72,68.87 72,65 L72,43 C72,39.13 68.87,36 65,36 Z M46,43.5 C46,42.2 47.4,41.4 48.5,42.1 L63.5,51.6 C64.5,52.3 64.5,53.7 63.5,54.4 L48.5,63.9 C47.4,64.6 46,63.8 46,62.5 Z" />
+</vector>

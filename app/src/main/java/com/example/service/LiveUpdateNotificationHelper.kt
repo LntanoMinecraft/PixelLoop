@@ -215,4 +215,61 @@ object LiveUpdateNotificationHelper {
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_ENCODING, notification)
     }
+
+    /**
+     * Posts or updates a background queue progress notification for sequential multi-video GIF conversion.
+     */
+    fun notifyBatchQueueProgress(
+        context: Context,
+        currentItemIndex: Int,
+        totalItems: Int,
+        currentTaskTitle: String,
+        currentFrame: Int,
+        totalFrames: Int,
+        isComplete: Boolean = false
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+        ensureChannel(context)
+
+        if (isComplete) {
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_QUEUE)
+            return
+        }
+
+        val framePercent = ((currentFrame.toFloat() / totalFrames.coerceAtLeast(1)) * 100).toInt().coerceIn(0, 100)
+        val overallPercent = (((currentItemIndex - 1).coerceAtLeast(0) * 100 + framePercent) / totalItems.coerceAtLeast(1))
+            .coerceIn(0, 100)
+
+        val progressStyle = NotificationCompat.ProgressStyle()
+            .setStyledByProgress(true)
+            .setProgress(overallPercent)
+            .setProgressSegments(
+                listOf(
+                    NotificationCompat.ProgressStyle.Segment(100).setColor(Color.rgb(38, 198, 218))
+                )
+            )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID_LIVE_UPDATES)
+            .setSmallIcon(R.drawable.ic_live_record_notif)
+            .setContentTitle("队列后台处理中 ($currentItemIndex/$totalItems)")
+            .setContentText("$currentTaskTitle · $framePercent% ($currentFrame/$totalFrames 帧)")
+            .setShortCriticalText("队列 $currentItemIndex/$totalItems")
+            .setOngoing(true)
+            .setRequestPromotedOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setStyle(progressStyle)
+            .build()
+
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_QUEUE, notification)
+    }
+
+    const val NOTIFICATION_ID_QUEUE = 1603
 }

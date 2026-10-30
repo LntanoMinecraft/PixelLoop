@@ -28,14 +28,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.AddToQueue
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.MovieCreation
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,8 +62,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.GifCreationEntity
+import com.example.data.ThemeMode
 import com.example.data.ThemePreferences
-import com.example.ui.components.Android16LiveUpdateCard
 import com.example.ui.components.AnimatedGifPlayer
 import com.example.ui.components.formatFileSize
 import com.example.ui.theme.ExpressiveSprings
@@ -71,14 +74,16 @@ fun HomeScreen(
     isRecordingActive: Boolean,
     recordingElapsedSeconds: Int,
     countdownValue: Int?,
+    activeQueueCount: Int,
     recentCreations: List<GifCreationEntity>,
     onToggleDynamicColor: (Boolean) -> Unit,
-    onToggleDarkMode: (Boolean) -> Unit,
+    onCycleThemeMode: () -> Unit,
     onStartScreenRecord: () -> Unit,
     onStopLiveRecordAndEdit: () -> Unit,
-    onStartLiveNotifCaptureDemo: () -> Unit,
+    onAddTileToControlCenter: () -> Unit,
     onPickLocalVideo: () -> Unit,
-    onGenerateDemoVideo: () -> Unit,
+    onPickMultipleVideosForQueue: () -> Unit,
+    onOpenQueue: () -> Unit,
     onShareCreation: (GifCreationEntity) -> Unit,
     onOpenGallery: () -> Unit,
     modifier: Modifier = Modifier
@@ -91,43 +96,48 @@ fun HomeScreen(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 108.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Clean Top Header + Theme Controls
+            // 1. Minimalist Top Bar: App Title + Dynamic Color & Auto Dark/Light Controls
             item {
                 ExpressiveTopHeader(
                     themePreferences = themePreferences,
                     onToggleDynamicColor = onToggleDynamicColor,
-                    onToggleDarkMode = onToggleDarkMode
+                    onCycleThemeMode = onCycleThemeMode
                 )
             }
 
-            // 2. Unified Dual Creation Cards (MP4 to GIF & Screen Record to GIF)
+            // 2. Active Recording Banner (Shown only while recording is active)
+            if (isRecordingActive) {
+                item {
+                    ActiveRecordingBanner(
+                        elapsedSeconds = recordingElapsedSeconds,
+                        onStopAndEditClick = onStopLiveRecordAndEdit
+                    )
+                }
+            }
+
+            // 2b. Active Background Queue Banner (Shown when queue has pending/processing items)
+            if (activeQueueCount > 0) {
+                item {
+                    ActiveQueueBanner(
+                        activeQueueCount = activeQueueCount,
+                        onOpenQueueClick = onOpenQueue
+                    )
+                }
+            }
+
+            // 3. Clean Dual Action Cards: Import Video (Single + Batch Queue) & Screen Record (+ Control Center Tile)
             item {
                 DualCreationHeroSection(
                     isRecordingActive = isRecordingActive,
                     onStartScreenRecord = onStartScreenRecord,
                     onStopLiveRecordAndEdit = onStopLiveRecordAndEdit,
+                    onAddTileToControlCenter = onAddTileToControlCenter,
                     onPickLocalVideo = onPickLocalVideo,
-                    onGenerateDemoVideo = onGenerateDemoVideo
+                    onPickMultipleVideosForQueue = onPickMultipleVideosForQueue
                 )
             }
 
-            // 3. Android 16 (API 36) Live Updates Interactive Status Card
-            item {
-                Android16LiveUpdateCard(
-                    isRecording = isRecordingActive,
-                    elapsedSeconds = recordingElapsedSeconds,
-                    isPromotedSupported = true,
-                    onStopAndEditClick = onStopLiveRecordAndEdit,
-                    onTestLiveNotificationClick = onStartLiveNotifCaptureDemo
-                )
-            }
-
-            // 4. Clean Specification Summary Grid
-            item {
-                UnifiedFeatureGrid()
-            }
-
-            // 5. Recent GIF Creations Carousel
+            // 4. Recent Creations Carousel (Shown only when user has creations)
             if (recentCreations.isNotEmpty()) {
                 item {
                     RecentCreationsSection(
@@ -152,10 +162,69 @@ fun HomeScreen(
 }
 
 @Composable
+private fun ActiveQueueBanner(
+    activeQueueCount: Int,
+    onOpenQueueClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(onClick = onOpenQueueClick)
+            .testTag("active_queue_banner"),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.QueuePlayNext,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "后台队列处理中 ($activeQueueCount 项)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "查看队列",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ExpressiveTopHeader(
     themePreferences: ThemePreferences,
     onToggleDynamicColor: (Boolean) -> Unit,
-    onToggleDarkMode: (Boolean) -> Unit
+    onCycleThemeMode: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -164,25 +233,18 @@ private fun ExpressiveTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = stringResource(R.string.app_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = stringResource(R.string.app_name),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Dynamic Color Toggle Chip
             Surface(
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
@@ -197,7 +259,7 @@ private fun ExpressiveTopHeader(
                 }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -212,7 +274,7 @@ private fun ExpressiveTopHeader(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = if (themePreferences.useDynamicColor) "动态取色" else "标准配色",
+                        text = "动态色",
                         style = MaterialTheme.typography.labelLarge,
                         color = if (themePreferences.useDynamicColor) {
                             MaterialTheme.colorScheme.onPrimaryContainer
@@ -223,26 +285,100 @@ private fun ExpressiveTopHeader(
                 }
             }
 
-            IconButton(
-                onClick = { onToggleDarkMode(!themePreferences.useDarkMode) },
+            // 3-State Theme Mode Chip (跟随系统 / 浅色 / 深色)
+            Surface(
                 modifier = Modifier
-                    .size(42.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = CircleShape
+                    .minimumInteractiveComponentSize()
+                    .clip(CircleShape)
+                    .clickable(onClick = onCycleThemeMode)
+                    .testTag("toggle_dark_mode_button"),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = when (themePreferences.themeMode) {
+                            ThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                            ThemeMode.LIGHT -> Icons.Filled.LightMode
+                            ThemeMode.DARK -> Icons.Filled.DarkMode
+                        },
+                        contentDescription = stringResource(R.string.toggle_dark_mode),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(16.dp)
                     )
-                    .testTag("toggle_dark_mode_button")
+                    Text(
+                        text = themePreferences.themeMode.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveRecordingBanner(
+    elapsedSeconds: Int,
+    onStopAndEditClick: () -> Unit
+) {
+    val mins = elapsedSeconds / 60
+    val secs = elapsedSeconds % 60
+    val formattedTimer = String.format("%02d:%02d", mins, secs)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("android16_live_update_card"),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+                Text(
+                    text = "录制中 $formattedTimer",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Button(
+                onClick = onStopAndEditClick,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                modifier = Modifier
+                    .height(40.dp)
+                    .testTag("stop_live_record_button")
             ) {
                 Icon(
-                    imageVector = if (themePreferences.useDarkMode) {
-                        Icons.Filled.LightMode
-                    } else {
-                        Icons.Filled.DarkMode
-                    },
-                    contentDescription = stringResource(R.string.toggle_dark_mode),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(18.dp)
+                    imageVector = Icons.Filled.StopCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
                 )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("停止并编辑", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -253,11 +389,12 @@ private fun DualCreationHeroSection(
     isRecordingActive: Boolean,
     onStartScreenRecord: () -> Unit,
     onStopLiveRecordAndEdit: () -> Unit,
+    onAddTileToControlCenter: () -> Unit,
     onPickLocalVideo: () -> Unit,
-    onGenerateDemoVideo: () -> Unit
+    onPickMultipleVideosForQueue: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Primary Card 1: MP4 Video to GIF
+        // Card 1: Video to GIF (Single Edit + Multi-Video Batch Queue)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -280,31 +417,23 @@ private fun DualCreationHeroSection(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(52.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Filled.VideoLibrary,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.card_import_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.card_import_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.card_import_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
                 Row(
@@ -328,7 +457,7 @@ private fun DualCreationHeroSection(
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = stringResource(R.string.btn_pick_video),
                             style = MaterialTheme.typography.labelLarge
@@ -336,21 +465,21 @@ private fun DualCreationHeroSection(
                     }
 
                     FilledTonalButton(
-                        onClick = onGenerateDemoVideo,
+                        onClick = onPickMultipleVideosForQueue,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .testTag("generate_demo_video_button"),
+                            .testTag("batch_queue_mp4_button"),
                         shape = CircleShape
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.MovieCreation,
+                            imageVector = Icons.Filled.AddToQueue,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "载入示例视频",
+                            text = stringResource(R.string.btn_batch_queue),
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -358,7 +487,7 @@ private fun DualCreationHeroSection(
             }
         }
 
-        // Primary Card 2: Screen Recording to GIF
+        // Card 2: Screen Recording to GIF + Add Quick Settings Tile to Control Center
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -381,105 +510,84 @@ private fun DualCreationHeroSection(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.size(52.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Filled.ScreenShare,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.card_record_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
+                    Text(
+                        text = stringResource(R.string.card_record_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = if (isRecordingActive) onStopLiveRecordAndEdit else onStartScreenRecord,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("start_screen_record_button"),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isRecordingActive) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            contentColor = if (isRecordingActive) {
+                                MaterialTheme.colorScheme.onError
+                            } else {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            }
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.FiberManualRecord,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = stringResource(R.string.card_record_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (isRecordingActive) {
+                                stringResource(R.string.btn_stop_record_now)
+                            } else {
+                                stringResource(R.string.btn_start_record)
+                            },
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
-                }
 
-                Button(
-                    onClick = if (isRecordingActive) onStopLiveRecordAndEdit else onStartScreenRecord,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("start_screen_record_button"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRecordingActive) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                        contentColor = if (isRecordingActive) {
-                            MaterialTheme.colorScheme.onError
-                        } else {
-                            MaterialTheme.colorScheme.onPrimary
-                        }
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FiberManualRecord,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isRecordingActive) "结束录制并进入 GIF 剪辑" else stringResource(R.string.btn_start_record),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UnifiedFeatureGrid() {
-    val specs = listOf(
-        "帧率控制" to "5 – 60 FPS",
-        "输出分辨率" to "240p – 720p",
-        "画面裁剪" to "自由 / 多比例",
-        "倍速调节" to "0.5x – 2.0x"
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        specs.forEach { (title, value) ->
-            Surface(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
+                    FilledTonalButton(
+                        onClick = onAddTileToControlCenter,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("add_control_center_tile_button"),
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DashboardCustomize,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.btn_add_control_center),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
             }
         }
@@ -498,22 +606,11 @@ private fun RecentCreationsSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesomeMotion,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "最近作品",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
+            Text(
+                text = "最近作品",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
             Surface(
                 modifier = Modifier
@@ -530,7 +627,7 @@ private fun RecentCreationsSection(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "查看全部 (${creations.size})",
+                        text = "全部 (${creations.size})",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -551,7 +648,7 @@ private fun RecentCreationsSection(
             items(creations.take(6), key = { it.id }) { item ->
                 Surface(
                     modifier = Modifier
-                        .width(204.dp)
+                        .width(196.dp)
                         .testTag("recent_gif_card_${item.id}"),
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -561,7 +658,7 @@ private fun RecentCreationsSection(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(128.dp)
+                                .height(124.dp)
                                 .clip(RoundedCornerShape(14.dp))
                         ) {
                             AnimatedGifPlayer(
@@ -612,7 +709,7 @@ private fun RecentCreationsSection(
                             IconButton(
                                 onClick = { onShareCreation(item) },
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(36.dp)
                                     .background(
                                         color = MaterialTheme.colorScheme.primaryContainer,
                                         shape = CircleShape
@@ -621,7 +718,7 @@ private fun RecentCreationsSection(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Share,
-                                    contentDescription = "一键分享",
+                                    contentDescription = "分享",
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -647,39 +744,24 @@ private fun CountdownOverlay(secondsLeft: Int) {
             .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.95f)),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Surface(
+            modifier = Modifier
+                .size(144.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary
         ) {
-            Surface(
-                modifier = Modifier
-                    .size(148.dp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                    },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = secondsLeft.toString(),
-                        style = MaterialTheme.typography.displayLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = secondsLeft.toString(),
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
             }
-            Text(
-                text = "准备开始屏幕捕获…",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "录制开始后可通过 Android 16 实时通知栏随时停止并裁剪 GIF",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

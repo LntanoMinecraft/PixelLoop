@@ -56,4 +56,12 @@ class ExampleRobolectricTest {
         assertEquals("GIF89a", header)
         assertEquals(0x3B.toByte(), bytes.last())
     }
+
+    @Test
+    fun `verify Quick Settings Tile resources and BatchQueueUiState`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals("录屏转 GIF", context.getString(R.string.qs_tile_record_gif_label))
+        assertEquals("停止并转 GIF", context.getString(R.string.qs_tile_stop_gif_label))
+        assertEquals("队列", context.getString(R.string.nav_queue))
+    }
 }

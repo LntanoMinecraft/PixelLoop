@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -68,19 +67,25 @@ fun GalleryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.gallery_header_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "共 ${creations.size} 件本地动图作品 · 支持零权限一键分享",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Text(
+                text = stringResource(R.string.gallery_header_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            if (creations.isNotEmpty()) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = "${creations.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
 
@@ -98,31 +103,25 @@ fun GalleryScreen(
                     Column(
                         modifier = Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AutoAwesomeMotion,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                         Text(
                             text = stringResource(R.string.gallery_empty_title),
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = stringResource(R.string.gallery_empty_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
                         Button(
                             onClick = onGoToHome,
                             shape = CircleShape,
                             modifier = Modifier.testTag("gallery_empty_go_home_button")
                         ) {
-                            Text("前往创作台")
+                            Text("开始创作")
                         }
                     }
                 }
@@ -181,21 +180,6 @@ private fun GalleryCreationCard(
 
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {
-                    Text(
-                        text = if (item.sourceType == "SCREEN_RECORD") "录屏捕获" else "MP4 转码",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-
-                Surface(
-                    modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(10.dp),
                     shape = CircleShape,
@@ -223,7 +207,7 @@ private fun GalleryCreationCard(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "${item.width}×${item.height} px · ${item.fps} FPS · ${item.frameCount} 帧 · ${item.cropRatioLabel}",
+                text = "${item.width}×${item.height} · ${item.fps} FPS · ${item.frameCount} 帧",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -253,7 +237,7 @@ private fun GalleryCreationCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("一键分享", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.btn_share_social), style = MaterialTheme.typography.labelLarge)
                 }
 
                 FilledTonalIconButton(

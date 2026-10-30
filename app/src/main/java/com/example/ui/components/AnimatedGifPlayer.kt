@@ -40,10 +40,12 @@ import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
 import androidx.compose.material.icons.outlined.Crop
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.QueuePlayNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -170,6 +172,7 @@ fun AnimatedGifPlayer(
 @Composable
 fun ExpressiveFloatingNavBar(
     currentTab: StudioTab,
+    queueCount: Int = 0,
     galleryCount: Int,
     onSelectTab: (StudioTab) -> Unit,
     modifier: Modifier = Modifier
@@ -178,7 +181,7 @@ fun ExpressiveFloatingNavBar(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -193,8 +196,8 @@ fun ExpressiveFloatingNavBar(
         ) {
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ExpressiveFloatingNavItem(
@@ -215,6 +218,16 @@ fun ExpressiveFloatingNavBar(
                     badgeCount = 0,
                     onClick = { onSelectTab(StudioTab.EDITOR) },
                     testTag = "nav_tab_editor"
+                )
+
+                ExpressiveFloatingNavItem(
+                    selected = currentTab == StudioTab.QUEUE,
+                    activeIcon = Icons.Filled.QueuePlayNext,
+                    inactiveIcon = Icons.Outlined.QueuePlayNext,
+                    label = stringResource(R.string.nav_queue),
+                    badgeCount = queueCount,
+                    onClick = { onSelectTab(StudioTab.QUEUE) },
+                    testTag = "nav_tab_queue"
                 )
 
                 ExpressiveFloatingNavItem(
@@ -242,7 +255,7 @@ private fun ExpressiveFloatingNavItem(
     testTag: String
 ) {
     val horizontalPad by animateDpAsState(
-        targetValue = if (selected) 20.dp else 16.dp,
+        targetValue = if (selected) 16.dp else 12.dp,
         animationSpec = ExpressiveSprings.cornerMorphSpec,
         label = "navItemPad"
     )

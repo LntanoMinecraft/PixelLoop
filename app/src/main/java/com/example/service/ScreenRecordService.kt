@@ -164,14 +164,16 @@ class ScreenRecordService : Service() {
                 latestRecordedFile = null,
                 statusMessage = "正在通过 Android 16 实时通知捕获屏幕…"
             )
+            QuickRecordTileService.requestTileSync(this)
 
             startLiveNotificationTicker()
         } catch (e: Exception) {
             _recordingState.value = LiveRecordingState(
                 isRecording = false,
                 elapsedSeconds = 0,
-                statusMessage = "录屏启动受限 (${e.localizedMessage ?: "环境不支持"})，已为您准备内置演示录制流"
+                statusMessage = "录屏启动受限 (${e.localizedMessage ?: "环境不支持"})"
             )
+            QuickRecordTileService.requestTileSync(this)
             cleanupRecorderResources()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -238,6 +240,7 @@ class ScreenRecordService : Service() {
             )
         }
 
+        QuickRecordTileService.requestTileSync(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

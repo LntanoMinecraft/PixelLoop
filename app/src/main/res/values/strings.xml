@@ -1,64 +1,62 @@
 <resources>
     <string name="app_name">PixelLoop</string>
-    <string name="app_subtitle">灵动帧 · 录屏与视频转 GIF 工坊</string>
 
     <!-- Navigation -->
-    <string name="nav_home">创作台</string>
-    <string name="nav_editor">剪辑室</string>
+    <string name="nav_home">创作</string>
+    <string name="nav_editor">剪辑</string>
+    <string name="nav_queue">队列</string>
     <string name="nav_gallery">作品库</string>
 
     <!-- Theme & Expressive Controls -->
-    <string name="toggle_dynamic_color">动态壁纸取色</string>
-    <string name="toggle_dark_mode">深浅色切换</string>
-    <string name="expressive_badge">M3 Expressive · 零模糊高帧率</string>
-    <string name="live_update_badge">Android 16 实时通知已适配</string>
+    <string name="toggle_dynamic_color">动态取色</string>
+    <string name="toggle_dark_mode">深浅色模式</string>
 
     <!-- Home Screen -->
-    <string name="card_record_title">录屏捕获 GIF</string>
-    <string name="card_record_desc">3秒弹性倒计时 · Android 16 状态栏胶囊实时通知随时结束并裁剪</string>
-    <string name="btn_start_record">开启屏幕录制</string>
-    <string name="btn_stop_record_now">完成录制并转 GIF</string>
+    <string name="card_record_title">屏幕录制转 GIF</string>
+    <string name="btn_start_record">开始录屏</string>
+    <string name="btn_stop_record_now">完成录制</string>
+    <string name="btn_add_control_center">添加至控制中心</string>
 
-    <string name="card_import_title">导入 MP4 转 GIF</string>
-    <string name="card_import_desc">从相册选择任意 MP4 录屏或视频，支持时间截取、自由裁剪与帧率调优</string>
-    <string name="btn_pick_video">选择本地 MP4</string>
-    <string name="btn_generate_demo_video">一键生成演示 MP4 立即体验</string>
+    <string name="card_import_title">视频转 GIF</string>
+    <string name="btn_pick_video">单选剪辑</string>
+    <string name="btn_batch_queue">批量加入队列</string>
+    <string name="btn_add_to_queue">加入队列</string>
 
-    <!-- Android 16 Live Notification Banner -->
-    <string name="a16_live_notif_title">Android 16 实时更新通知 (Live Updates)</string>
-    <string name="a16_live_notif_promoted">已开启系统级状态栏胶囊与分段进度指示 (ProgressStyle)</string>
-    <string name="a16_live_notif_recording">正在录制屏幕 · 点击通知栏或下方按钮即可停止并进入 GIF 剪辑</string>
-    <string name="notif_channel_live_name">录屏与 GIF 实时进度</string>
-    <string name="notif_channel_live_desc">Android 16 实时显示屏幕录制时长与 GIF 编码状态</string>
+    <!-- Control Center / Quick Settings Tile -->
+    <string name="qs_tile_record_gif_label">录屏转 GIF</string>
+    <string name="qs_tile_stop_gif_label">停止并转 GIF</string>
+    <string name="qs_tile_subtitle_ready">点击开始录制</string>
+    <string name="qs_tile_subtitle_recording">正在录制中</string>
+
+    <!-- Android 16 Live Notification -->
+    <string name="notif_channel_live_name">录制与导出进度</string>
+    <string name="notif_channel_live_desc">实时显示录屏时长与 GIF 导出进度</string>
     <string name="notif_action_stop_edit">停止并转 GIF</string>
     <string name="notif_action_cancel">取消录制</string>
 
     <!-- Editor Screen -->
-    <string name="editor_empty_title">尚未载入视频源</string>
-    <string name="editor_empty_desc">您可以从创作台选择本地 MP4、开启屏幕录制，或直接生成一段炫彩高帧率演示视频立即测试裁剪与 GIF 合成。</string>
-    <string name="section_crop_ratio">画面区域裁剪 (拖拽四角手柄或点选比例)</string>
-    <string name="section_timeline_trim">时间轴首尾截取</string>
-    <string name="section_parameters">帧率 · 分辨率 · 倍速调优</string>
-    <string name="label_fps">帧率 (FPS)</string>
-    <string name="label_resolution">输出分辨率</string>
-    <string name="label_speed">播放倍速</string>
-    <string name="label_estimated_output">实时预估体积与规格</string>
-    <string name="btn_export_gif">合成并导出动态 GIF</string>
-    <string name="btn_reset_crop">重置裁剪框</string>
-    <string name="btn_preview_loop">循环播放预览</string>
+    <string name="editor_empty_title">未选择视频</string>
+    <string name="section_crop_ratio">画面裁剪</string>
+    <string name="section_timeline_trim">时间截取</string>
+    <string name="section_parameters">参数调节</string>
+    <string name="label_fps">帧率</string>
+    <string name="label_resolution">分辨率</string>
+    <string name="label_speed">倍速</string>
+    <string name="btn_export_gif">导出 GIF</string>
+    <string name="btn_reset_crop">重置裁剪</string>
+    <string name="btn_preview_loop">播放预览</string>
     <string name="btn_pause_preview">暂停预览</string>
 
     <!-- Export & Share Dialog -->
-    <string name="exporting_title">正在高速编码 GIF…</string>
-    <string name="export_complete_title">GIF 创作完成</string>
-    <string name="btn_share_social">一键分享至社交平台</string>
-    <string name="btn_save_gallery">保存到系统相册</string>
-    <string name="btn_view_in_library">在作品库中查看</string>
-    <string name="share_chooser_title">分享动态 GIF 到社交平台</string>
+    <string name="exporting_title">正在导出 GIF…</string>
+    <string name="export_complete_title">导出完成</string>
+    <string name="btn_share_social">分享</string>
+    <string name="btn_save_gallery">保存到相册</string>
+    <string name="btn_view_in_library">查看作品库</string>
+    <string name="share_chooser_title">分享 GIF</string>
 
     <!-- Gallery Screen -->
-    <string name="gallery_header_title">本地 GIF 作品库</string>
-    <string name="gallery_empty_title">作品库暂无 GIF 动图</string>
-    <string name="gallery_empty_desc">完成一次录屏捕获或 MP4 转码后，您的 GIF 作品将保存在这里，随时查看参数并一键重分享。</string>
-    <string name="btn_delete_gif">删除作品</string>
+    <string name="gallery_header_title">作品库</string>
+    <string name="gallery_empty_title">暂无作品</string>
+    <string name="btn_delete_gif">删除</string>
 </resources>

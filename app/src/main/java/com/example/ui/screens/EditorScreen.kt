@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddToQueue
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Crop
@@ -109,7 +110,6 @@ private enum class DragTarget {
 fun EditorScreen(
     uiState: GifEditorUiState,
     onPickVideo: () -> Unit,
-    onGenerateDemoVideo: () -> Unit,
     onSelectAspectPreset: (CropAspectPreset) -> Unit,
     onUpdateCropRect: (NormalizedCropRect) -> Unit,
     onUpdateTrimRange: (Long, Long) -> Unit,
@@ -117,6 +117,7 @@ fun EditorScreen(
     onUpdateFps: (Int) -> Unit,
     onUpdateResolution: (ResolutionPreset) -> Unit,
     onUpdateSpeed: (Float) -> Unit,
+    onAddToQueue: () -> Unit = {},
     onExportGif: () -> Unit,
     onDismissEncodingDialog: () -> Unit,
     onShareCreation: (GifCreationEntity) -> Unit,
@@ -127,7 +128,6 @@ fun EditorScreen(
     if (uiState.videoMetadata == null && !uiState.isLoadingVideo) {
         EmptyEditorView(
             onPickVideo = onPickVideo,
-            onGenerateDemoVideo = onGenerateDemoVideo,
             modifier = modifier
         )
         return
@@ -203,6 +203,7 @@ fun EditorScreen(
                     outputHeight = uiState.outputHeight,
                     targetFps = uiState.targetFps,
                     playbackSpeed = uiState.playbackSpeed,
+                    onAddToQueue = onAddToQueue,
                     onExportGif = onExportGif
                 )
             }
@@ -269,6 +270,7 @@ private fun ExportActionCard(
     outputHeight: Int,
     targetFps: Int,
     playbackSpeed: Float,
+    onAddToQueue: () -> Unit,
     onExportGif: () -> Unit
 ) {
     Surface(
@@ -277,14 +279,17 @@ private fun ExportActionCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(24.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -306,7 +311,7 @@ private fun ExportActionCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
                     text = "$outputWidth × $outputHeight px · $targetFps FPS · ${playbackSpeed}x",
                     style = MaterialTheme.typography.labelSmall,
@@ -314,29 +319,53 @@ private fun ExportActionCard(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Button(
-                onClick = onExportGif,
-                modifier = Modifier
-                    .height(50.dp)
-                    .testTag("export_gif_button"),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.btn_export_gif),
-                    style = MaterialTheme.typography.labelLarge
-                )
+                FilledTonalButton(
+                    onClick = onAddToQueue,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("add_to_queue_button"),
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AddToQueue,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.btn_add_to_queue),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                Button(
+                    onClick = onExportGif,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("export_gif_button"),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.btn_export_gif),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }
@@ -345,7 +374,6 @@ private fun ExportActionCard(
 @Composable
 private fun EmptyEditorView(
     onPickVideo: () -> Unit,
-    onGenerateDemoVideo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -368,14 +396,14 @@ private fun EmptyEditorView(
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier.size(60.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.Crop,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
@@ -384,13 +412,6 @@ private fun EmptyEditorView(
                     text = stringResource(R.string.editor_empty_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Text(
-                    text = stringResource(R.string.editor_empty_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
                 )
 
                 Button(
@@ -404,19 +425,6 @@ private fun EmptyEditorView(
                     Icon(imageVector = Icons.Filled.VideoLibrary, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.btn_pick_video))
-                }
-
-                FilledTonalButton(
-                    onClick = onGenerateDemoVideo,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("editor_generate_demo_button"),
-                    shape = CircleShape
-                ) {
-                    Icon(imageVector = Icons.Filled.MovieCreation, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.btn_generate_demo_video))
                 }
             }
         }
@@ -656,10 +664,10 @@ private fun InteractiveCropCanvasCard(
                 }
             }
 
-            // Dedicated Playback Control & Timecode Bar (never obscures crop handles)
+            // Dedicated Playback Control & Timecode Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -692,12 +700,6 @@ private fun InteractiveCropCanvasCard(
                         )
                     }
                 }
-
-                Text(
-                    text = "自适应原片比例 · 拖拽四角裁剪",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
             LazyRow(
@@ -850,7 +852,6 @@ private fun ParameterConsoleCard(
     onUpdateResolution: (ResolutionPreset) -> Unit,
     onUpdateSpeed: (Float) -> Unit
 ) {
-    // Includes newly added 30fps, 45fps, and 60fps options
     val fpsOptions = listOf(5, 8, 10, 12, 15, 20, 24, 30, 45, 60)
     val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
@@ -883,7 +884,6 @@ private fun ParameterConsoleCard(
                 )
             }
 
-            // 1. Frame Rate (FPS) Control (5 - 60 FPS)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -925,7 +925,6 @@ private fun ParameterConsoleCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-            // 2. Output Resolution Control
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(R.string.label_resolution),
@@ -947,7 +946,6 @@ private fun ParameterConsoleCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-            // 3. Playback Speed Control
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(R.string.label_speed),
@@ -1012,8 +1010,8 @@ private fun EncodingProgressDialog(
                 )
 
                 Text(
-                    text = "正在编码第 $currentFrame / $totalFrames 帧 · 自适应 256 色高精度还原中",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "$currentFrame / $totalFrames 帧",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
