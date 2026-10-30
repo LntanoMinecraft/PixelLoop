@@ -1,0 +1,480 @@
+package com.example.ui.components
+
+import android.graphics.BitmapFactory
+import android.graphics.Movie
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.ui.theme.ExpressiveSprings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileInputStream
+import kotlin.math.min
+
+/**
+ * Hardware-accelerated, zero-blur Animated GIF Player using Android's native Movie decoder
+ * with automatic static thumbnail fallback.
+ */
+@Composable
+fun AnimatedGifPlayer(
+    gifFilePath: String,
+    thumbnailPath: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    isPlaying: Boolean = true
+) {
+    @Suppress("DEPRECATION")
+    val movie by produceState<Movie?>(initialValue = null, key1 = gifFilePath) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = File(gifFilePath)
+                if (file.exists()) {
+                    FileInputStream(file).use { fis ->
+                        val bytes = fis.readBytes()
+                        Movie.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                } else null
+            }.getOrNull()
+        }
+    }
+
+    val fallbackBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = thumbnailPath
+    ) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = File(thumbnailPath)
+                if (file.exists()) {
+                    BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                } else null
+            }.getOrNull()
+        }
+    }
+
+    var frameTickMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(movie, isPlaying) {
+        if (movie != null && isPlaying) {
+            val startTime = System.currentTimeMillis()
+            while (isActive) {
+                withFrameMillis {
+                    frameTickMs = System.currentTimeMillis() - startTime
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest),
+        contentAlignment = Alignment.Center
+    ) {
+        val currentMovie = movie
+        if (currentMovie != null && currentMovie.width() > 0 && currentMovie.height() > 0) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val movieW = currentMovie.width().toFloat()
+                val movieH = currentMovie.height().toFloat()
+                val scale = min(size.width / movieW, size.height / movieH)
+                val dx = (size.width - movieW * scale) / 2f
+                val dy = (size.height - movieH * scale) / 2f
+
+                val duration = currentMovie.duration().coerceAtLeast(400)
+                val relTime = (frameTickMs % duration).toInt()
+
+                drawIntoCanvas { canvas ->
+                    val native = canvas.nativeCanvas
+                    native.save()
+                    native.translate(dx, dy)
+                    native.scale(scale, scale)
+                    currentMovie.setTime(relTime)
+                    currentMovie.draw(native, 0f, 0f)
+                    native.restore()
+                }
+            }
+        } else if (fallbackBitmap != null) {
+            Image(
+                bitmap = fallbackBitmap!!,
+                contentDescription = contentDescription,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Text(
+                text = "GIF",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+/**
+ * Unified Material 3 Expressive Shape-Morphing Pill Chip.
+ * Uses consistent tonal tokens (`primary` / `onPrimary` when selected, `surfaceContainerHigh` when unselected)
+ * so all parameter groups share a clean, cohesive visual language.
+ */
+@Composable
+fun ExpressiveMorphChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    onAccentColor: Color = MaterialTheme.colorScheme.onPrimary,
+    testTag: String? = null
+) {
+    val cornerRadius by animateDpAsState(
+        targetValue = if (selected) 24.dp else 12.dp,
+        animationSpec = ExpressiveSprings.cornerMorphSpec,
+        label = "chipCornerMorph"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.02f else 1.0f,
+        animationSpec = ExpressiveSprings.bouncySpatial(),
+        label = "chipScaleMorph"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) accentColor else MaterialTheme.colorScheme.surfaceContainerHigh,
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "chipBgColor"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) onAccentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "chipTextColor"
+    )
+
+    val taggedModifier = if (testTag != null) modifier.testTag(testTag) else modifier
+
+    Surface(
+        modifier = taggedModifier
+            .minimumInteractiveComponentSize()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(cornerRadius))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(cornerRadius),
+        color = containerColor
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+        }
+    }
+}
+
+/**
+ * Clean, Tonal Android 16 (API 36) Live Updates Status Card.
+ * Uses unified MaterialTheme.colorScheme tokens without chaotic multi-color bars.
+ */
+@Composable
+fun Android16LiveUpdateCard(
+    isRecording: Boolean,
+    elapsedSeconds: Int,
+    isPromotedSupported: Boolean,
+    onStopAndEditClick: () -> Unit,
+    onTestLiveNotificationClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "liveRecPulse")
+    val dotScale by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotScale"
+    )
+
+    val mins = elapsedSeconds / 60
+    val secs = elapsedSeconds % 60
+    val formattedTimer = String.format("%02d:%02d", mins, secs)
+    val statusChipText = if (isRecording) "REC $formattedTimer" else "LIVE READY"
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("android16_live_update_card"),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isRecording) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.NotificationsActive,
+                                contentDescription = "Android 16 实时通知",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "Android 16 实时通知",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "状态栏胶囊计时与 ProgressStyle 进度",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Status Bar ShortCriticalText Chip Replica
+                Surface(
+                    shape = CircleShape,
+                    color = if (isRecording) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .graphicsLayer {
+                                    if (isRecording) {
+                                        scaleX = dotScale
+                                        scaleY = dotScale
+                                    }
+                                }
+                                .background(
+                                    color = if (isRecording) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                    shape = CircleShape
+                                )
+                        )
+                        Text(
+                            text = statusChipText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isRecording) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Unified Tonal 3-Segment ProgressStyle Bar
+            val progressFraction = (elapsedSeconds.coerceIn(0, 30) / 30f)
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(CircleShape)
+            ) {
+                val gap = 6.dp.toPx()
+                val segWidth = (size.width - gap * 2f) / 3f
+                val h = size.height
+
+                for (i in 0..2) {
+                    drawRoundRect(
+                        color = trackColor,
+                        topLeft = Offset((segWidth + gap) * i, 0f),
+                        size = Size(segWidth, h),
+                        cornerRadius = CornerRadius(h / 2f, h / 2f)
+                    )
+                }
+
+                val activeWidth = if (isRecording) {
+                    (size.width * progressFraction).coerceAtLeast(16.dp.toPx())
+                } else {
+                    segWidth * 0.5f
+                }
+                drawRoundRect(
+                    color = primaryColor,
+                    topLeft = Offset(0f, 0f),
+                    size = Size(activeWidth.coerceAtMost(size.width), h),
+                    cornerRadius = CornerRadius(h / 2f, h / 2f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isRecording) {
+                        "录制进行中 · 可在通知栏或此处停止并裁剪"
+                    } else {
+                        "录制时自动在系统状态栏胶囊展示实时秒数"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                if (isRecording) {
+                    Button(
+                        onClick = onStopAndEditClick,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier
+                            .height(40.dp)
+                            .testTag("stop_live_record_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.StopCircle,
+                            contentDescription = "停止录制并编辑",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("停止并转 GIF", style = MaterialTheme.typography.labelLarge)
+                    }
+                } else {
+                    FilledTonalButton(
+                        onClick = onTestLiveNotificationClick,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .height(40.dp)
+                            .testTag("preview_live_notif_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.FiberManualRecord,
+                            contentDescription = "体验实时通知录屏",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("模拟实时通知", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun formatFileSize(bytes: Long): String {
+    return if (bytes >= 1024 * 1024) {
+        String.format("%.2f MB", bytes / (1024f * 1024f))
+    } else {
+        String.format("%d KB", (bytes / 1024L).coerceAtLeast(1L))
+    }
+}
+
+fun formatDurationMs(ms: Long): String {
+    val totalTenths = (ms / 100L).coerceAtLeast(0L)
+    val secs = totalTenths / 10
+    val tenths = totalTenths % 10
+    val mins = secs / 60
+    val remSecs = secs % 60
+    return String.format("%02d:%02d.%d", mins, remSecs, tenths)
+}

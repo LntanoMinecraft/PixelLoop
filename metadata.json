@@ -1,0 +1,6 @@
+{
+  "name": "PixelLoop 灵动帧",
+  "description": "Material 3 Expressive 录屏捕获与 MP4 视频转 GIF 创意工坊，支持 Android 16 实时通知、帧率与分辨率调节、画面与时间轴裁剪及一键社交分享。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

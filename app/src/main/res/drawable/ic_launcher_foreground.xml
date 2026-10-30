@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Expressive Viewfinder Frame Brackets -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M28,36 C28,31.58 31.58,28 36,28 L44,28 L44,33 L36,33 C34.34,33 33,34.34 33,36 L33,44 L28,44 Z" />
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M80,36 C80,31.58 76.42,28 72,28 L64,28 L64,33 L72,33 C73.66,33 75,34.34 75,36 L75,44 L80,44 Z" />
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M28,72 C28,76.42 31.58,80 36,80 L44,80 L44,75 L36,75 C34.34,75 33,73.66 33,72 L33,64 L28,64 Z" />
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M80,72 C80,76.42 76.42,80 72,80 L64,80 L64,75 L72,75 C73.66,75 75,73.66 75,72 L75,64 L80,64 Z" />
+    <!-- Central Expressive Loop & Play Prism -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M38,44 C38,39.58 41.58,36 46,36 L62,36 C66.42,36 70,39.58 70,44 L70,64 C70,68.42 66.42,72 62,72 L46,72 C41.58,72 38,68.42 38,64 Z" />
+    <path
+        android:fillColor="#FFF8E1"
+        android:pathData="M48,45 L63,54 L48,63 Z" />
+    <!-- Live Record Dot Badge -->
+    <path
+        android:fillColor="#26C6DA"
+        android:pathData="M72,36 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>

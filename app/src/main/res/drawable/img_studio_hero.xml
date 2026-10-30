@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Crisp Geometric Expressive Background -->
+    <path
+        android:fillColor="#1E1633"
+        android:pathData="M0,0h320v180h-320z" />
+    <!-- Expressive Pill Ribbon Left -->
+    <path
+        android:fillColor="#39285C"
+        android:pathData="M-20,120 L140,20 L170,50 L10,150 Z" />
+    <!-- Expressive Pill Ribbon Right -->
+    <path
+        android:fillColor="#2A3E52"
+        android:pathData="M160,150 L290,30 L320,60 L190,180 Z" />
+    <!-- Film Strip Card Frame -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M74,34 C74,27.37 79.37,22 86,22 L234,22 C240.63,22 246,27.37 246,34 L246,146 C246,152.63 240.63,158 234,158 L86,158 C79.37,158 74,152.63 74,146 Z" />
+    <path
+        android:fillColor="#161224"
+        android:pathData="M84,38 C84,34.69 86.69,32 90,32 L230,32 C233.31,32 236,34.69 236,38 L236,142 C236,145.31 233.31,148 230,148 L90,148 C86.69,148 84,145.31 84,142 Z" />
+    <!-- Rule of Thirds Crop Grid Inside Frame -->
+    <path
+        android:fillColor="#3D3556"
+        android:pathData="M134,32h2v116h-2z M184,32h2v116h-2z M84,70h152v2h-152z M84,108h152v2h-152z" />
+    <!-- Dynamic Play & Loop Badge in Center -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M160,90 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M152,76 L176,90 L152,104 Z" />
+    <!-- Expressive Floating Chips -->
+    <path
+        android:fillColor="#26C6DA"
+        android:pathData="M34,44 C34,37.37 39.37,32 46,32 L86,32 C92.63,32 98,37.37 98,44 C98,50.63 92.63,56 86,56 L46,56 C39.37,56 34,50.63 34,44 Z" />
+    <path
+        android:fillColor="#FF8A65"
+        android:pathData="M218,134 C218,127.37 223.37,122 230,122 L278,122 C284.63,122 290,127.37 290,134 C290,140.63 284.63,146 278,146 L230,146 C223.37,146 218,140.63 218,134 Z" />
+</vector>

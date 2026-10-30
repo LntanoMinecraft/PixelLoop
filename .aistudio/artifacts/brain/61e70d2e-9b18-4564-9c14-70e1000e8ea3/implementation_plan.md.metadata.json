@@ -1,0 +1,6 @@
+{
+  "summary":  "更新 PixelLoop (灵动帧) 实现方案：加入 Android 16 (API 36) 实时更新通知 (Live Updates / ProgressStyle / setRequestPromotedOngoing / 状态栏胶囊计时) 作为核心录屏与转码交互通知，并确立零模糊 (Zero-Blur) 与 GPU Draw 阶段硬件加速的应用流畅度优化策略。",
+  "updatedAt":  "2026-10-30T08:35:11.370732442Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}
