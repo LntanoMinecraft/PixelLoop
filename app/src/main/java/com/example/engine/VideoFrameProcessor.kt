@@ -56,7 +56,10 @@ data class VideoSourceMetadata(
     val height: Int,
     val rotationDegrees: Int,
     val sourceType: String
-)
+) {
+    val aspectRatio: Float
+        get() = (width.toFloat() / height.coerceAtLeast(1).toFloat()).coerceIn(0.3f, 3.0f)
+}
 
 data class GifExportResult(
     val gifFile: File,
@@ -71,7 +74,7 @@ data class GifExportResult(
 class VideoFrameProcessor(private val context: Context) {
 
     // Memory cache for timeline filmstrip thumbnails & scrub frames to keep UI at 60/120fps
-    private val frameCache = object : LruCache<String, Bitmap>(24 * 1024) {
+    private val frameCache = object : LruCache<String, Bitmap>(28 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int {
             return value.allocationByteCount / 1024
         }
@@ -139,7 +142,13 @@ class VideoFrameProcessor(private val context: Context) {
                     result.add(cached)
                     continue
                 }
-                val bmp = decodeScaledFrame(retriever, timeMs * 1000L, 160, 160)
+                val bmp = decodeScaledFrame(
+                    retriever = retriever,
+                    timeUs = timeMs * 1000L,
+                    maxW = 160,
+                    maxH = 160,
+                    preciseOption = false
+                )
                 if (bmp != null) {
                     frameCache.put(cacheKey, bmp)
                     result.add(bmp)
@@ -161,7 +170,7 @@ class VideoFrameProcessor(private val context: Context) {
         timeMs: Long,
         maxDimension: Int = 640
     ): Bitmap? = withContext(Dispatchers.IO) {
-        val bucketTimeMs = (timeMs / 80L) * 80L
+        val bucketTimeMs = (timeMs / 60L) * 60L
         val cacheKey = "${uri}_${bucketTimeMs}_preview_$maxDimension"
         val cached = frameCache.get(cacheKey)
         if (cached != null && !cached.isRecycled) {
@@ -170,7 +179,13 @@ class VideoFrameProcessor(private val context: Context) {
         val retriever = MediaMetadataRetriever()
         try {
             setRetrieverSource(retriever, uri)
-            val bmp = decodeScaledFrame(retriever, bucketTimeMs * 1000L, maxDimension, maxDimension)
+            val bmp = decodeScaledFrame(
+                retriever = retriever,
+                timeUs = bucketTimeMs * 1000L,
+                maxW = maxDimension,
+                maxH = maxDimension,
+                preciseOption = true
+            )
             if (bmp != null) {
                 frameCache.put(cacheKey, bmp)
             }
@@ -201,7 +216,6 @@ class VideoFrameProcessor(private val context: Context) {
         } else {
             1f
         }
-        // Align to even pixel numbers for clean rendering
         val outW = ((croppedW * scale).roundToInt() and 0xFFFE).coerceAtLeast(64)
         val outH = ((croppedH * scale).roundToInt() and 0xFFFE).coerceAtLeast(64)
         return outW to outH
@@ -209,7 +223,7 @@ class VideoFrameProcessor(private val context: Context) {
 
     /**
      * Executes full frame extraction, spatial cropping, scaling, and GIF89a LZW encoding
-     * on Dispatchers.Default with real-time progress callbacks.
+     * on Dispatchers.Default with accurate centisecond frame pacing (supporting 5..60 FPS).
      */
     suspend fun exportVideoToGif(
         metadata: VideoSourceMetadata,
@@ -227,8 +241,12 @@ class VideoFrameProcessor(private val context: Context) {
             val sourceDurationMs = (validEndMs - validStartMs).coerceAtLeast(200L)
 
             val effectiveDurationMs = (sourceDurationMs / playbackSpeed).roundToInt().coerceAtLeast(200)
-            val totalFrames = ((effectiveDurationMs / 1000f) * targetFps).roundToInt().coerceIn(4, 150)
-            val frameDelayMs = (1000f / targetFps).roundToInt().coerceAtLeast(30)
+            // Note: GIF89a decoders universally throttle frame delays < 2 centiseconds (20ms = 50fps ceiling).
+            // For 30/45/60 FPS, we sample at the requested FPS (up to 50Hz effective GIF tick) and use a
+            // Bresenham centisecond accumulator so playback speed matches real-time 1:1 with zero lag!
+            val clampedFps = targetFps.coerceIn(5, 60)
+            val effectiveGifFps = min(50, clampedFps)
+            val totalFrames = ((effectiveDurationMs / 1000f) * effectiveGifFps).roundToInt().coerceIn(4, 240)
 
             val (outWidth, outHeight) = calculateOutputDimensions(
                 sourceWidth = metadata.width,
@@ -236,6 +254,10 @@ class VideoFrameProcessor(private val context: Context) {
                 cropRect = cropRect,
                 resolutionPreset = resolutionPreset
             )
+
+            // Compute exact decode target size so hardware decoder downsamples directly during decode
+            val decodeMaxW = (outWidth / cropRect.widthFraction).roundToInt().coerceIn(outWidth, metadata.width)
+            val decodeMaxH = (outHeight / cropRect.heightFraction).roundToInt().coerceIn(outHeight, metadata.height)
 
             val gifsDir = File(context.filesDir, "gifs").apply { mkdirs() }
             val timestamp = System.currentTimeMillis()
@@ -252,17 +274,27 @@ class VideoFrameProcessor(private val context: Context) {
                     val encoder = AnimatedGifEncoder(fos)
                     encoder.start(outWidth, outHeight, loopCount = 0)
 
+                    // Exact centisecond accumulator so total GIF duration equals effectiveDurationMs
+                    val totalCentiseconds = max(totalFrames * 2, (effectiveDurationMs + 5) / 10)
+                    var accumulatedCs = 0
+
                     for (frameIdx in 0 until totalFrames) {
                         coroutineContext.ensureActive()
 
                         val fraction = if (totalFrames <= 1) 0f else frameIdx.toFloat() / (totalFrames - 1)
                         val sampleTimeMs = validStartMs + (fraction * sourceDurationMs).toLong()
 
+                        // Calculate exact centiseconds for this frame without rounding drift
+                        val targetNextCs = (((frameIdx + 1) * totalCentiseconds).toFloat() / totalFrames).roundToInt()
+                        val frameDelayCs = max(2, targetNextCs - accumulatedCs)
+                        accumulatedCs += frameDelayCs
+
                         val rawFrame = decodeScaledFrame(
                             retriever = retriever,
                             timeUs = sampleTimeMs * 1000L,
-                            maxW = max(outWidth * 2, 480),
-                            maxH = max(outHeight * 2, 480)
+                            maxW = decodeMaxW,
+                            maxH = decodeMaxH,
+                            preciseOption = true
                         ) ?: generateFallbackFrame(outWidth, outHeight, frameIdx, totalFrames)
 
                         val croppedAndScaled = cropAndScaleBitmap(
@@ -276,7 +308,7 @@ class VideoFrameProcessor(private val context: Context) {
                             firstCroppedFrame = croppedAndScaled.copy(Bitmap.Config.ARGB_8888, false)
                         }
 
-                        encoder.addFrame(croppedAndScaled, frameDelayMs)
+                        encoder.addFrame(croppedAndScaled, frameDelayCs)
 
                         if (croppedAndScaled !== rawFrame) {
                             croppedAndScaled.recycle()
@@ -289,7 +321,6 @@ class VideoFrameProcessor(private val context: Context) {
                     encoder.finish()
                 }
 
-                // Save crisp PNG thumbnail of the first cropped frame
                 val thumbBitmap = firstCroppedFrame
                     ?: generateFallbackFrame(outWidth, outHeight, 0, 1)
                 FileOutputStream(thumbFile).use { thumbOut ->
@@ -324,17 +355,34 @@ class VideoFrameProcessor(private val context: Context) {
         retriever: MediaMetadataRetriever,
         timeUs: Long,
         maxW: Int,
-        maxH: Int
+        maxH: Int,
+        preciseOption: Boolean
     ): Bitmap? {
+        val option = if (preciseOption) {
+            MediaMetadataRetriever.OPTION_CLOSEST
+        } else {
+            MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            retriever.getScaledFrameAtTime(
+            val preferredParams = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                MediaMetadataRetriever.BitmapParams().apply {
+                    preferredConfig = Bitmap.Config.ARGB_8888
+                }
+            } else null
+
+            val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && preferredParams != null) {
+                retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH, preferredParams)
+            } else {
+                retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH)
+            }
+            bmp ?: retriever.getScaledFrameAtTime(
                 timeUs,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
                 maxW,
                 maxH
-            ) ?: retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            )
         } else {
-            retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            retriever.getFrameAtTime(timeUs, option)
         }
     }
 
@@ -365,10 +413,10 @@ class VideoFrameProcessor(private val context: Context) {
     private fun generateFallbackFrame(w: Int, h: Int, index: Int, total: Int): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        canvas.drawColor(Color.rgb(24, 20, 42))
+        canvas.drawColor(Color.rgb(24, 28, 42))
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val progress = index.toFloat() / max(1, total)
-        paint.color = Color.rgb(255, 179, 0)
+        paint.color = Color.rgb(174, 198, 255)
         val cx = w * (0.2f + 0.6f * progress)
         val cy = h * 0.5f
         canvas.drawCircle(cx, cy, min(w, h) * 0.18f, paint)

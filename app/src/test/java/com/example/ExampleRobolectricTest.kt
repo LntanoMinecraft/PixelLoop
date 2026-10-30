@@ -46,8 +46,8 @@ class ExampleRobolectricTest {
             eraseColor(Color.rgb(38, 198, 218))
         }
 
-        encoder.addFrame(frame1, 80)
-        encoder.addFrame(frame2, 80)
+        encoder.addFrame(frame1, 8)
+        encoder.addFrame(frame2, 8)
         encoder.finish()
 
         val bytes = baos.toByteArray()

@@ -1,7 +1,10 @@
 package com.example.ui.components
 
 import android.graphics.BitmapFactory
-import android.graphics.Movie
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
+import android.os.Build
+import android.widget.ImageView
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -20,18 +23,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.outlined.AutoAwesomeMotion
+import androidx.compose.material.icons.outlined.Crop
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -41,13 +53,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,24 +63,25 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.example.R
+import com.example.ui.StudioTab
 import com.example.ui.theme.ExpressiveSprings
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileInputStream
-import kotlin.math.min
 
 /**
- * Hardware-accelerated, zero-blur Animated GIF Player using Android's native Movie decoder
- * with automatic static thumbnail fallback.
+ * Hardware-accelerated Animated GIF Player.
+ * Uses Android's native `ImageDecoder` + `AnimatedImageDrawable` (RenderThread accelerated) on API 28+
+ * so high-resolution and high-FPS GIFs play at full native speed without frame delay or color shift.
  */
 @Composable
 fun AnimatedGifPlayer(
@@ -83,21 +91,6 @@ fun AnimatedGifPlayer(
     modifier: Modifier = Modifier,
     isPlaying: Boolean = true
 ) {
-    @Suppress("DEPRECATION")
-    val movie by produceState<Movie?>(initialValue = null, key1 = gifFilePath) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val file = File(gifFilePath)
-                if (file.exists()) {
-                    FileInputStream(file).use { fis ->
-                        val bytes = fis.readBytes()
-                        Movie.decodeByteArray(bytes, 0, bytes.size)
-                    }
-                } else null
-            }.getOrNull()
-        }
-    }
-
     val fallbackBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
         initialValue = null,
         key1 = thumbnailPath
@@ -112,45 +105,47 @@ fun AnimatedGifPlayer(
         }
     }
 
-    var frameTickMs by remember { mutableLongStateOf(0L) }
-
-    LaunchedEffect(movie, isPlaying) {
-        if (movie != null && isPlaying) {
-            val startTime = System.currentTimeMillis()
-            while (isActive) {
-                withFrameMillis {
-                    frameTickMs = System.currentTimeMillis() - startTime
-                }
-            }
-        }
-    }
-
     Box(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest),
         contentAlignment = Alignment.Center
     ) {
-        val currentMovie = movie
-        if (currentMovie != null && currentMovie.width() > 0 && currentMovie.height() > 0) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val movieW = currentMovie.width().toFloat()
-                val movieH = currentMovie.height().toFloat()
-                val scale = min(size.width / movieW, size.height / movieH)
-                val dx = (size.width - movieW * scale) / 2f
-                val dy = (size.height - movieH * scale) / 2f
-
-                val duration = currentMovie.duration().coerceAtLeast(400)
-                val relTime = (frameTickMs % duration).toInt()
-
-                drawIntoCanvas { canvas ->
-                    val native = canvas.nativeCanvas
-                    native.save()
-                    native.translate(dx, dy)
-                    native.scale(scale, scale)
-                    currentMovie.setTime(relTime)
-                    currentMovie.draw(native, 0f, 0f)
-                    native.restore()
+        val gifFile = File(gifFilePath)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && gifFile.exists()) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    ImageView(ctx).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        this.contentDescription = contentDescription
+                    }
+                },
+                update = { imageView ->
+                    val currentTag = imageView.tag as? String
+                    if (currentTag != gifFilePath) {
+                        imageView.tag = gifFilePath
+                        runCatching {
+                            val source = ImageDecoder.createSource(gifFile)
+                            val drawable = ImageDecoder.decodeDrawable(source) { decoder, _, _ ->
+                                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                            }
+                            imageView.setImageDrawable(drawable)
+                            if (drawable is AnimatedImageDrawable && isPlaying) {
+                                drawable.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
+                                drawable.start()
+                            }
+                        }
+                    } else {
+                        val drawable = imageView.drawable
+                        if (drawable is AnimatedImageDrawable) {
+                            if (isPlaying && !drawable.isRunning) {
+                                drawable.start()
+                            } else if (!isPlaying && drawable.isRunning) {
+                                drawable.stop()
+                            }
+                        }
+                    }
                 }
-            }
+            )
         } else if (fallbackBitmap != null) {
             Image(
                 bitmap = fallbackBitmap!!,
@@ -169,9 +164,169 @@ fun AnimatedGifPlayer(
 }
 
 /**
+ * Material Design 3 Expressive (MD3E) Floating Pill Navigation Bar.
+ * Features a detached floating capsule bar with bouncy expanding pill indicators.
+ */
+@Composable
+fun ExpressiveFloatingNavBar(
+    currentTab: StudioTab,
+    galleryCount: Int,
+    onSelectTab: (StudioTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ExpressiveFloatingNavItem(
+                    selected = currentTab == StudioTab.HOME,
+                    activeIcon = Icons.Filled.Home,
+                    inactiveIcon = Icons.Outlined.Home,
+                    label = stringResource(R.string.nav_home),
+                    badgeCount = 0,
+                    onClick = { onSelectTab(StudioTab.HOME) },
+                    testTag = "nav_tab_home"
+                )
+
+                ExpressiveFloatingNavItem(
+                    selected = currentTab == StudioTab.EDITOR,
+                    activeIcon = Icons.Filled.Crop,
+                    inactiveIcon = Icons.Outlined.Crop,
+                    label = stringResource(R.string.nav_editor),
+                    badgeCount = 0,
+                    onClick = { onSelectTab(StudioTab.EDITOR) },
+                    testTag = "nav_tab_editor"
+                )
+
+                ExpressiveFloatingNavItem(
+                    selected = currentTab == StudioTab.GALLERY,
+                    activeIcon = Icons.Filled.AutoAwesomeMotion,
+                    inactiveIcon = Icons.Outlined.AutoAwesomeMotion,
+                    label = stringResource(R.string.nav_gallery),
+                    badgeCount = galleryCount,
+                    onClick = { onSelectTab(StudioTab.GALLERY) },
+                    testTag = "nav_tab_gallery"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpressiveFloatingNavItem(
+    selected: Boolean,
+    activeIcon: ImageVector,
+    inactiveIcon: ImageVector,
+    label: String,
+    badgeCount: Int,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    val horizontalPad by animateDpAsState(
+        targetValue = if (selected) 20.dp else 16.dp,
+        animationSpec = ExpressiveSprings.cornerMorphSpec,
+        label = "navItemPad"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.03f else 1.0f,
+        animationSpec = ExpressiveSprings.bouncySpatial(),
+        label = "navItemScale"
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "navItemBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "navItemContent"
+    )
+
+    Surface(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        shape = CircleShape,
+        color = bgColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = horizontalPad, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = if (selected) activeIcon else inactiveIcon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+            if (badgeCount > 0) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    }
+                ) {
+                    Text(
+                        text = badgeCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Unified Material 3 Expressive Shape-Morphing Pill Chip.
- * Uses consistent tonal tokens (`primary` / `onPrimary` when selected, `surfaceContainerHigh` when unselected)
- * so all parameter groups share a clean, cohesive visual language.
  */
 @Composable
 fun ExpressiveMorphChip(
@@ -234,7 +389,6 @@ fun ExpressiveMorphChip(
 
 /**
  * Clean, Tonal Android 16 (API 36) Live Updates Status Card.
- * Uses unified MaterialTheme.colorScheme tokens without chaotic multi-color bars.
  */
 @Composable
 fun Android16LiveUpdateCard(
@@ -323,7 +477,6 @@ fun Android16LiveUpdateCard(
                     }
                 }
 
-                // Status Bar ShortCriticalText Chip Replica
                 Surface(
                     shape = CircleShape,
                     color = if (isRecording) {
@@ -368,7 +521,6 @@ fun Android16LiveUpdateCard(
                 }
             }
 
-            // Unified Tonal 3-Segment ProgressStyle Bar
             val progressFraction = (elapsedSeconds.coerceIn(0, 30) / 30f)
             Canvas(
                 modifier = Modifier

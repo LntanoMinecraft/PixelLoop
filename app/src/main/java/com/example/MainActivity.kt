@@ -21,31 +21,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesomeMotion
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.outlined.AutoAwesomeMotion
-import androidx.compose.material.icons.outlined.Crop
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,6 +41,7 @@ import com.example.service.LiveUpdateNotificationHelper
 import com.example.service.ScreenRecordService
 import com.example.ui.StudioTab
 import com.example.ui.StudioViewModel
+import com.example.ui.components.ExpressiveFloatingNavBar
 import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.GalleryScreen
 import com.example.ui.screens.HomeScreen
@@ -78,7 +64,6 @@ class MainActivity : ComponentActivity() {
             val studioViewModel: StudioViewModel = viewModel(factory = viewModelFactory)
             val themePrefs by studioViewModel.themePreferences.collectAsStateWithLifecycle()
 
-            // Check if launched from the Android 16 Live Update notification "停止并转 GIF" action
             LaunchedEffect(intent) {
                 val recordedPath = intent?.getStringExtra(ScreenRecordService.EXTRA_RECORDED_FILE_PATH)
                 if (!recordedPath.isNullOrBlank()) {
@@ -124,12 +109,10 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
         }
     }
 
-    // Back navigation handler for secondary tabs
     BackHandler(enabled = currentTab != StudioTab.HOME) {
         studioViewModel.selectTab(StudioTab.HOME)
     }
 
-    // Zero-Permission Android Photo Picker for MP4 Video selection
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
@@ -142,7 +125,6 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
         }
     }
 
-    // MediaProjection Screen Capture Launcher
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -162,7 +144,6 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
         }
     }
 
-    // Android 13+ / Android 16 Notification Permission Launcher for Live Updates
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -180,7 +161,6 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
             runCatching {
                 mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
             }.onFailure {
-                // Fallback in headless/virtual environments: run countdown & live notification capture flow
                 studioViewModel.startRecordCountdown {
                     studioViewModel.startLiveNotificationCaptureDemo()
                 }
@@ -208,63 +188,7 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            ) {
-                NavigationBarItem(
-                    selected = currentTab == StudioTab.HOME,
-                    onClick = { studioViewModel.selectTab(StudioTab.HOME) },
-                    icon = {
-                        Icon(
-                            imageVector = if (currentTab == StudioTab.HOME) Icons.Filled.Home else Icons.Outlined.Home,
-                            contentDescription = stringResource(R.string.nav_home)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.nav_home)) },
-                    modifier = Modifier.testTag("nav_tab_home")
-                )
-
-                NavigationBarItem(
-                    selected = currentTab == StudioTab.EDITOR,
-                    onClick = { studioViewModel.selectTab(StudioTab.EDITOR) },
-                    icon = {
-                        Icon(
-                            imageVector = if (currentTab == StudioTab.EDITOR) Icons.Filled.Crop else Icons.Outlined.Crop,
-                            contentDescription = stringResource(R.string.nav_editor)
-                        )
-                    },
-                    label = { Text(stringResource(R.string.nav_editor)) },
-                    modifier = Modifier.testTag("nav_tab_editor")
-                )
-
-                NavigationBarItem(
-                    selected = currentTab == StudioTab.GALLERY,
-                    onClick = { studioViewModel.selectTab(StudioTab.GALLERY) },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (allCreations.isNotEmpty()) {
-                                    Badge { Text(allCreations.size.toString()) }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (currentTab == StudioTab.GALLERY) {
-                                    Icons.Filled.AutoAwesomeMotion
-                                } else {
-                                    Icons.Outlined.AutoAwesomeMotion
-                                },
-                                contentDescription = stringResource(R.string.nav_gallery)
-                            )
-                        }
-                    },
-                    label = { Text(stringResource(R.string.nav_gallery)) },
-                    modifier = Modifier.testTag("nav_tab_gallery")
-                )
-            }
-        }
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -337,6 +261,14 @@ fun PixelLoopAppRoot(studioViewModel: StudioViewModel) {
                     )
                 }
             }
+
+            // MD3E (Material Design 3 Expressive) Floating Pill Navigation Bar
+            ExpressiveFloatingNavBar(
+                currentTab = currentTab,
+                galleryCount = allCreations.size,
+                onSelectTab = studioViewModel::selectTab,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }

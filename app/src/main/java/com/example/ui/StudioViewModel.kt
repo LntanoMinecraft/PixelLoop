@@ -353,7 +353,7 @@ class StudioViewModel(
     }
 
     fun updateTargetFps(fps: Int) {
-        val clamped = fps.coerceIn(5, 24)
+        val clamped = fps.coerceIn(5, 60)
         _editorState.update { state ->
             recalculateEstimates(state.copy(targetFps = clamped))
         }
@@ -390,10 +390,10 @@ class StudioViewModel(
             var currentMs = _editorState.value.trimStartMs
             while (isActive && _editorState.value.isPlayingPreview) {
                 val state = _editorState.value
-                val stepDelayMs = (1000L / state.targetFps.coerceAtLeast(5)).coerceAtLeast(45L)
+                val stepDelayMs = (1000L / state.targetFps.coerceIn(5, 30)).coerceAtLeast(33L)
                 val advanceMs = (stepDelayMs * state.playbackSpeed).toLong()
 
-                val frame = frameProcessor.extractPreviewFrame(meta.uri, currentMs, maxDimension = 480)
+                val frame = frameProcessor.extractPreviewFrame(meta.uri, currentMs, maxDimension = 540)
                 if (frame != null) {
                     _editorState.update {
                         it.copy(
@@ -415,8 +415,8 @@ class StudioViewModel(
         val meta = _editorState.value.videoMetadata ?: return
         scrubJob?.cancel()
         scrubJob = viewModelScope.launch {
-            delay(35L) // Lightweight debounce so slider drag stays at 120fps
-            val bmp = frameProcessor.extractPreviewFrame(meta.uri, timeMs, maxDimension = 540)
+            delay(30L)
+            val bmp = frameProcessor.extractPreviewFrame(meta.uri, timeMs, maxDimension = 640)
             if (bmp != null) {
                 _editorState.update { it.copy(currentPreviewBitmap = bmp) }
             }
@@ -540,10 +540,10 @@ class StudioViewModel(
         )
         val rawClipMs = (state.trimEndMs - state.trimStartMs).coerceAtLeast(300L)
         val effectiveDurationMs = (rawClipMs / state.playbackSpeed).roundToInt().coerceAtLeast(250)
-        val frameCount = ((effectiveDurationMs / 1000f) * state.targetFps).roundToInt().coerceIn(4, 150)
+        val effectiveGifFps = min(50, state.targetFps.coerceIn(5, 60))
+        val frameCount = ((effectiveDurationMs / 1000f) * effectiveGifFps).roundToInt().coerceIn(4, 240)
 
-        // Realistic LZW 256-color compressed bytes per pixel (~0.32 bytes/pixel per frame)
-        val bytesPerFrame = (outW * outH * 0.32f).toLong()
+        val bytesPerFrame = (outW * outH * 0.28f).toLong()
         val estimatedBytes = (bytesPerFrame * frameCount + 1200L).coerceAtLeast(12_000L)
 
         return state.copy(
@@ -578,7 +578,7 @@ class StudioViewModel(
                             bmp.compress(Bitmap.CompressFormat.PNG, 90, thumbOut)
                         }
                     }
-                    encoder.addFrame(bmp, 80)
+                    encoder.addFrame(bmp, 8)
                     bmp.recycle()
                 }
                 encoder.finish()

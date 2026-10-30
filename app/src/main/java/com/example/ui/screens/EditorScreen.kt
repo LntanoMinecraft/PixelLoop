@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,10 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -130,6 +133,17 @@ fun EditorScreen(
         return
     }
 
+    val videoAspectRatio = remember(uiState.videoMetadata, uiState.currentPreviewBitmap) {
+        val meta = uiState.videoMetadata
+        val bmp = uiState.currentPreviewBitmap
+        when {
+            bmp != null && bmp.width > 0 && bmp.height > 0 ->
+                (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.32f, 2.8f)
+            meta != null -> meta.aspectRatio
+            else -> 0.75f
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
@@ -138,10 +152,11 @@ fun EditorScreen(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 116.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Interactive Spatial Crop Canvas + Aspect Ratio Morphing Bar
+            // 1. Adaptive-Ratio Spatial Crop Canvas + Aspect Ratio Morphing Bar
             item {
                 InteractiveCropCanvasCard(
                     previewBitmap = uiState.currentPreviewBitmap,
+                    videoAspectRatio = videoAspectRatio,
                     cropRect = uiState.cropRect,
                     selectedPreset = uiState.aspectPreset,
                     outputWidth = uiState.outputWidth,
@@ -167,7 +182,7 @@ fun EditorScreen(
                 )
             }
 
-            // 3. Unified Parameter Console (FPS, Resolution, Playback Speed)
+            // 3. Unified Parameter Console (FPS up to 60fps, Resolution, Playback Speed)
             item {
                 ParameterConsoleCard(
                     targetFps = uiState.targetFps,
@@ -178,76 +193,18 @@ fun EditorScreen(
                     onUpdateSpeed = onUpdateSpeed
                 )
             }
-        }
 
-        // Sticky Bottom Live Estimate & Export Action Bar
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Text(
-                                text = "预计 ${formatFileSize(uiState.estimatedSizeBytes)}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                            )
-                        }
-                        Text(
-                            text = "共 ${uiState.estimatedFrameCount} 帧",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${uiState.outputWidth} × ${uiState.outputHeight} px · ${uiState.targetFps} FPS · ${uiState.playbackSpeed}x",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Button(
-                    onClick = onExportGif,
-                    modifier = Modifier
-                        .height(48.dp)
-                        .testTag("export_gif_button"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.btn_export_gif),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+            // 4. Export Summary & Primary Action Card inside scroll flow above Floating Nav Bar
+            item {
+                ExportActionCard(
+                    estimatedSizeBytes = uiState.estimatedSizeBytes,
+                    estimatedFrameCount = uiState.estimatedFrameCount,
+                    outputWidth = uiState.outputWidth,
+                    outputHeight = uiState.outputHeight,
+                    targetFps = uiState.targetFps,
+                    playbackSpeed = uiState.playbackSpeed,
+                    onExportGif = onExportGif
+                )
             }
         }
 
@@ -305,6 +262,87 @@ fun EditorScreen(
 }
 
 @Composable
+private fun ExportActionCard(
+    estimatedSizeBytes: Long,
+    estimatedFrameCount: Int,
+    outputWidth: Int,
+    outputHeight: Int,
+    targetFps: Int,
+    playbackSpeed: Float,
+    onExportGif: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = "预计 ${formatFileSize(estimatedSizeBytes)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                    }
+                    Text(
+                        text = "共 $estimatedFrameCount 帧",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "$outputWidth × $outputHeight px · $targetFps FPS · ${playbackSpeed}x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Button(
+                onClick = onExportGif,
+                modifier = Modifier
+                    .height(50.dp)
+                    .testTag("export_gif_button"),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.btn_export_gif),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmptyEditorView(
     onPickVideo: () -> Unit,
     onGenerateDemoVideo: () -> Unit,
@@ -313,7 +351,7 @@ private fun EmptyEditorView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -388,6 +426,7 @@ private fun EmptyEditorView(
 @Composable
 private fun InteractiveCropCanvasCard(
     previewBitmap: Bitmap?,
+    videoAspectRatio: Float,
     cropRect: NormalizedCropRect,
     selectedPreset: CropAspectPreset,
     outputWidth: Int,
@@ -422,6 +461,7 @@ private fun InteractiveCropCanvasCard(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Header Row: Title + Output Resolution Badge + Reset Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -477,172 +517,187 @@ private fun InteractiveCropCanvasCard(
                 }
             }
 
-            BoxWithConstraints(
+            // Adaptive Aspect-Ratio Stage: automatically matches the video's native aspect ratio
+            // so portrait (9:16 / 9:20) and landscape (16:9) videos never stretch or distort!
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(248.dp)
+                    .heightIn(min = 200.dp, max = 380.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                    .padding(8.dp)
                     .testTag("interactive_crop_canvas"),
                 contentAlignment = Alignment.Center
             ) {
-                val canvasW = constraints.maxWidth.toFloat().coerceAtLeast(1f)
-                val canvasH = constraints.maxHeight.toFloat().coerceAtLeast(1f)
-
-                if (previewBitmap != null && !previewBitmap.isRecycled) {
-                    Image(
-                        bitmap = previewBitmap.asImageBitmap(),
-                        contentDescription = "视频帧画面预览",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.FillBounds
-                    )
-                }
-
-                Canvas(
+                BoxWithConstraints(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            val touchSlopPx = 44.dp.toPx()
-                            detectDragGestures(
-                                onDragStart = { offset ->
-                                    val c = currentCrop
-                                    val lPx = c.left * size.width
-                                    val tPx = c.top * size.height
-                                    val rPx = c.right * size.width
-                                    val bPx = c.bottom * size.height
+                        .aspectRatio(
+                            ratio = videoAspectRatio,
+                            matchHeightConstraintsFirst = videoAspectRatio < 1f
+                        )
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val canvasW = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+                    val canvasH = constraints.maxHeight.toFloat().coerceAtLeast(1f)
 
-                                    activeDragTarget = when {
-                                        abs(offset.x - lPx) < touchSlopPx && abs(offset.y - tPx) < touchSlopPx -> DragTarget.TOP_LEFT
-                                        abs(offset.x - rPx) < touchSlopPx && abs(offset.y - tPx) < touchSlopPx -> DragTarget.TOP_RIGHT
-                                        abs(offset.x - lPx) < touchSlopPx && abs(offset.y - bPx) < touchSlopPx -> DragTarget.BOTTOM_LEFT
-                                        abs(offset.x - rPx) < touchSlopPx && abs(offset.y - bPx) < touchSlopPx -> DragTarget.BOTTOM_RIGHT
-                                        offset.x in lPx..rPx && offset.y in tPx..bPx -> DragTarget.CENTER_PAN
-                                        else -> DragTarget.NONE
-                                    }
-                                },
-                                onDragEnd = { activeDragTarget = DragTarget.NONE },
-                                onDragCancel = { activeDragTarget = DragTarget.NONE },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    val dx = dragAmount.x / canvasW
-                                    val dy = dragAmount.y / canvasH
-                                    val c = currentCrop
+                    if (previewBitmap != null && !previewBitmap.isRecycled) {
+                        Image(
+                            bitmap = previewBitmap.asImageBitmap(),
+                            contentDescription = "视频帧画面预览",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
 
-                                    val updated = when (activeDragTarget) {
-                                        DragTarget.TOP_LEFT -> c.copy(
-                                            left = (c.left + dx).coerceIn(0f, c.right - 0.2f),
-                                            top = (c.top + dy).coerceIn(0f, c.bottom - 0.2f)
-                                        )
-                                        DragTarget.TOP_RIGHT -> c.copy(
-                                            right = (c.right + dx).coerceIn(c.left + 0.2f, 1f),
-                                            top = (c.top + dy).coerceIn(0f, c.bottom - 0.2f)
-                                        )
-                                        DragTarget.BOTTOM_LEFT -> c.copy(
-                                            left = (c.left + dx).coerceIn(0f, c.right - 0.2f),
-                                            bottom = (c.bottom + dy).coerceIn(c.top + 0.2f, 1f)
-                                        )
-                                        DragTarget.BOTTOM_RIGHT -> c.copy(
-                                            right = (c.right + dx).coerceIn(c.left + 0.2f, 1f),
-                                            bottom = (c.bottom + dy).coerceIn(c.top + 0.2f, 1f)
-                                        )
-                                        DragTarget.CENTER_PAN -> {
-                                            val w = c.widthFraction
-                                            val h = c.heightFraction
-                                            val nl = (c.left + dx).coerceIn(0f, 1f - w)
-                                            val nt = (c.top + dy).coerceIn(0f, 1f - h)
-                                            NormalizedCropRect(nl, nt, nl + w, nt + h)
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(videoAspectRatio) {
+                                val touchSlopPx = 44.dp.toPx()
+                                detectDragGestures(
+                                    onDragStart = { offset ->
+                                        val c = currentCrop
+                                        val lPx = c.left * size.width
+                                        val tPx = c.top * size.height
+                                        val rPx = c.right * size.width
+                                        val bPx = c.bottom * size.height
+
+                                        activeDragTarget = when {
+                                            abs(offset.x - lPx) < touchSlopPx && abs(offset.y - tPx) < touchSlopPx -> DragTarget.TOP_LEFT
+                                            abs(offset.x - rPx) < touchSlopPx && abs(offset.y - tPx) < touchSlopPx -> DragTarget.TOP_RIGHT
+                                            abs(offset.x - lPx) < touchSlopPx && abs(offset.y - bPx) < touchSlopPx -> DragTarget.BOTTOM_LEFT
+                                            abs(offset.x - rPx) < touchSlopPx && abs(offset.y - bPx) < touchSlopPx -> DragTarget.BOTTOM_RIGHT
+                                            offset.x in lPx..rPx && offset.y in tPx..bPx -> DragTarget.CENTER_PAN
+                                            else -> DragTarget.NONE
                                         }
-                                        DragTarget.NONE -> c
-                                    }
-                                    onUpdateCrop(updated)
-                                }
-                            )
-                        }
-                ) {
-                    val leftPx = cropRect.left * size.width
-                    val topPx = cropRect.top * size.height
-                    val rightPx = cropRect.right * size.width
-                    val bottomPx = cropRect.bottom * size.height
-                    val cropW = (rightPx - leftPx).coerceAtLeast(10f)
-                    val cropH = (bottomPx - topPx).coerceAtLeast(10f)
-
-                    val cutoutPath = Path().apply {
-                        addRect(androidx.compose.ui.geometry.Rect(leftPx, topPx, rightPx, bottomPx))
-                    }
-                    clipPath(cutoutPath, clipOp = ClipOp.Difference) {
-                        drawRect(color = Color(0xAA0A0C10))
-                    }
-
-                    val gridStroke = 1.dp.toPx()
-                    val gridColor = Color.White.copy(alpha = 0.35f)
-                    for (i in 1..2) {
-                        val gx = leftPx + (cropW * i / 3f)
-                        val gy = topPx + (cropH * i / 3f)
-                        drawLine(gridColor, Offset(gx, topPx), Offset(gx, bottomPx), gridStroke)
-                        drawLine(gridColor, Offset(leftPx, gy), Offset(rightPx, gy), gridStroke)
-                    }
-
-                    drawRect(
-                        color = cropFrameColor,
-                        topLeft = Offset(leftPx, topPx),
-                        size = Size(cropW, cropH),
-                        style = Stroke(width = 2.dp.toPx())
-                    )
-
-                    val handleRadius = 7.dp.toPx() * handleScale
-                    val corners = listOf(
-                        Offset(leftPx, topPx),
-                        Offset(rightPx, topPx),
-                        Offset(leftPx, bottomPx),
-                        Offset(rightPx, bottomPx)
-                    )
-                    corners.forEach { pt ->
-                        drawCircle(color = cropFrameColor, radius = handleRadius, center = pt)
-                        drawCircle(color = handleCenterColor, radius = handleRadius * 0.4f, center = pt)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            IconButton(
-                                onClick = onTogglePlayback,
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .testTag("toggle_preview_play_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                    contentDescription = if (isPlaying) {
-                                        stringResource(R.string.btn_pause_preview)
-                                    } else {
-                                        stringResource(R.string.btn_preview_loop)
                                     },
-                                    tint = MaterialTheme.colorScheme.primary
+                                    onDragEnd = { activeDragTarget = DragTarget.NONE },
+                                    onDragCancel = { activeDragTarget = DragTarget.NONE },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val dx = dragAmount.x / canvasW
+                                        val dy = dragAmount.y / canvasH
+                                        val c = currentCrop
+
+                                        val updated = when (activeDragTarget) {
+                                            DragTarget.TOP_LEFT -> c.copy(
+                                                left = (c.left + dx).coerceIn(0f, c.right - 0.18f),
+                                                top = (c.top + dy).coerceIn(0f, c.bottom - 0.18f)
+                                            )
+                                            DragTarget.TOP_RIGHT -> c.copy(
+                                                right = (c.right + dx).coerceIn(c.left + 0.18f, 1f),
+                                                top = (c.top + dy).coerceIn(0f, c.bottom - 0.18f)
+                                            )
+                                            DragTarget.BOTTOM_LEFT -> c.copy(
+                                                left = (c.left + dx).coerceIn(0f, c.right - 0.18f),
+                                                bottom = (c.bottom + dy).coerceIn(c.top + 0.18f, 1f)
+                                            )
+                                            DragTarget.BOTTOM_RIGHT -> c.copy(
+                                                right = (c.right + dx).coerceIn(c.left + 0.18f, 1f),
+                                                bottom = (c.bottom + dy).coerceIn(c.top + 0.18f, 1f)
+                                            )
+                                            DragTarget.CENTER_PAN -> {
+                                                val w = c.widthFraction
+                                                val h = c.heightFraction
+                                                val nl = (c.left + dx).coerceIn(0f, 1f - w)
+                                                val nt = (c.top + dy).coerceIn(0f, 1f - h)
+                                                NormalizedCropRect(nl, nt, nl + w, nt + h)
+                                            }
+                                            DragTarget.NONE -> c
+                                        }
+                                        onUpdateCrop(updated)
+                                    }
                                 )
                             }
-                            Text(
-                                text = formatDurationMs(currentTimeMs),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    ) {
+                        val leftPx = cropRect.left * size.width
+                        val topPx = cropRect.top * size.height
+                        val rightPx = cropRect.right * size.width
+                        val bottomPx = cropRect.bottom * size.height
+                        val cropW = (rightPx - leftPx).coerceAtLeast(10f)
+                        val cropH = (bottomPx - topPx).coerceAtLeast(10f)
+
+                        val cutoutPath = Path().apply {
+                            addRect(androidx.compose.ui.geometry.Rect(leftPx, topPx, rightPx, bottomPx))
+                        }
+                        clipPath(cutoutPath, clipOp = ClipOp.Difference) {
+                            drawRect(color = Color(0xAA0A0C10))
+                        }
+
+                        val gridStroke = 1.dp.toPx()
+                        val gridColor = Color.White.copy(alpha = 0.35f)
+                        for (i in 1..2) {
+                            val gx = leftPx + (cropW * i / 3f)
+                            val gy = topPx + (cropH * i / 3f)
+                            drawLine(gridColor, Offset(gx, topPx), Offset(gx, bottomPx), gridStroke)
+                            drawLine(gridColor, Offset(leftPx, gy), Offset(rightPx, gy), gridStroke)
+                        }
+
+                        drawRect(
+                            color = cropFrameColor,
+                            topLeft = Offset(leftPx, topPx),
+                            size = Size(cropW, cropH),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+
+                        val handleRadius = 7.dp.toPx() * handleScale
+                        val corners = listOf(
+                            Offset(leftPx, topPx),
+                            Offset(rightPx, topPx),
+                            Offset(leftPx, bottomPx),
+                            Offset(rightPx, bottomPx)
+                        )
+                        corners.forEach { pt ->
+                            drawCircle(color = cropFrameColor, radius = handleRadius, center = pt)
+                            drawCircle(color = handleCenterColor, radius = handleRadius * 0.4f, center = pt)
                         }
                     }
                 }
+            }
+
+            // Dedicated Playback Control & Timecode Bar (never obscures crop handles)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onTogglePlayback)
+                        .testTag("toggle_preview_play_button"),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) {
+                                stringResource(R.string.btn_pause_preview)
+                            } else {
+                                stringResource(R.string.btn_preview_loop)
+                            },
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = formatDurationMs(currentTimeMs),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                Text(
+                    text = "自适应原片比例 · 拖拽四角裁剪",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             LazyRow(
@@ -795,7 +850,8 @@ private fun ParameterConsoleCard(
     onUpdateResolution: (ResolutionPreset) -> Unit,
     onUpdateSpeed: (Float) -> Unit
 ) {
-    val fpsOptions = listOf(5, 8, 10, 12, 15, 20, 24)
+    // Includes newly added 30fps, 45fps, and 60fps options
+    val fpsOptions = listOf(5, 8, 10, 12, 15, 20, 24, 30, 45, 60)
     val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
     Surface(
@@ -827,7 +883,7 @@ private fun ParameterConsoleCard(
                 )
             }
 
-            // 1. Frame Rate (FPS) Control
+            // 1. Frame Rate (FPS) Control (5 - 60 FPS)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -849,8 +905,7 @@ private fun ParameterConsoleCard(
                 Slider(
                     value = targetFps.toFloat(),
                     onValueChange = { onUpdateFps(it.toInt()) },
-                    valueRange = 5f..24f,
-                    steps = 18,
+                    valueRange = 5f..60f,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("fps_slider")
@@ -957,7 +1012,7 @@ private fun EncodingProgressDialog(
                 )
 
                 Text(
-                    text = "正在编码第 $currentFrame / $totalFrames 帧 · Android 16 实时通知同步更新中",
+                    text = "正在编码第 $currentFrame / $totalFrames 帧 · 自适应 256 色高精度还原中",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1016,7 +1071,7 @@ private fun ExportSuccessDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(186.dp)
+                        .height(200.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .border(
                             1.dp,

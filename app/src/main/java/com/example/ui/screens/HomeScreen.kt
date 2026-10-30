@@ -88,7 +88,7 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("home_screen_list"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 108.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 1. Clean Top Header + Theme Controls
@@ -447,7 +447,7 @@ private fun DualCreationHeroSection(
 @Composable
 private fun UnifiedFeatureGrid() {
     val specs = listOf(
-        "帧率控制" to "5 – 24 FPS",
+        "帧率控制" to "5 – 60 FPS",
         "输出分辨率" to "240p – 720p",
         "画面裁剪" to "自由 / 多比例",
         "倍速调节" to "0.5x – 2.0x"
