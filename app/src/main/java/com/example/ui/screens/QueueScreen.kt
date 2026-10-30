@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,9 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -83,54 +86,60 @@ fun QueueScreen(
     onShareCreation: (GifCreationEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("queue_screen_list"),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // 1. Header Bar: Title + Live Status Badge + Add Videos Button
-        item {
-            QueueHeaderSection(
-                queueState = queueState,
-                onAddMultipleVideos = onAddMultipleVideos,
-                onTogglePauseResume = onTogglePauseResume,
-                onClearCompleted = onClearCompleted
-            )
-        }
-
-        // 2. Batch Preset Parameters Card
-        item {
-            BatchPresetConfigCard(
-                config = queueState.config,
-                onUpdateFps = onUpdateBatchFps,
-                onUpdateResolution = onUpdateBatchResolution,
-                onUpdateSpeed = onUpdateBatchSpeed
-            )
-        }
-
-        // 3. Queue Task Items or Empty State
-        if (queueState.items.isEmpty()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 860.dp)
+                .testTag("queue_screen_list"),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 112.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Header Bar: Title + Live Status Badge + Add Videos Button
             item {
-                EmptyQueueStateCard(onAddMultipleVideos = onAddMultipleVideos)
-            }
-        } else {
-            itemsIndexed(
-                items = queueState.items,
-                key = { _, item -> item.id }
-            ) { index, task ->
-                QueueTaskCard(
-                    index = index + 1,
-                    task = task,
-                    canMoveUp = index > 0 &&
-                        task.status == QueueTaskStatus.PENDING &&
-                        queueState.items[index - 1].status == QueueTaskStatus.PENDING,
-                    onMoveUp = { onMoveTaskUp(task.id) },
-                    onRemove = { onRemoveTask(task.id) },
-                    onRetry = { onRetryTask(task.id) },
-                    onShareCreation = onShareCreation
+                QueueHeaderSection(
+                    queueState = queueState,
+                    onAddMultipleVideos = onAddMultipleVideos,
+                    onTogglePauseResume = onTogglePauseResume,
+                    onClearCompleted = onClearCompleted
                 )
+            }
+
+            // 2. Batch Preset Parameters Card
+            item {
+                BatchPresetConfigCard(
+                    config = queueState.config,
+                    onUpdateFps = onUpdateBatchFps,
+                    onUpdateResolution = onUpdateBatchResolution,
+                    onUpdateSpeed = onUpdateBatchSpeed
+                )
+            }
+
+            // 3. Queue Task Items or Empty State
+            if (queueState.items.isEmpty()) {
+                item {
+                    EmptyQueueStateCard(onAddMultipleVideos = onAddMultipleVideos)
+                }
+            } else {
+                itemsIndexed(
+                    items = queueState.items,
+                    key = { _, item -> item.id }
+                ) { index, task ->
+                    QueueTaskCard(
+                        index = index + 1,
+                        task = task,
+                        canMoveUp = index > 0 &&
+                            task.status == QueueTaskStatus.PENDING &&
+                            queueState.items[index - 1].status == QueueTaskStatus.PENDING,
+                        onMoveUp = { onMoveTaskUp(task.id) },
+                        onRemove = { onRemoveTask(task.id) },
+                        onRetry = { onRetryTask(task.id) },
+                        onShareCreation = onShareCreation
+                    )
+                }
             }
         }
     }
@@ -143,6 +152,8 @@ private fun QueueHeaderSection(
     onTogglePauseResume: () -> Unit,
     onClearCompleted: () -> Unit
 ) {
+    val compactBtnPad = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -151,12 +162,15 @@ private fun QueueHeaderSection(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "任务队列",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -178,6 +192,7 @@ private fun QueueHeaderSection(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
                         color = if (queueState.isProcessing) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
@@ -188,11 +203,14 @@ private fun QueueHeaderSection(
                 }
             }
 
+            Spacer(modifier = Modifier.width(8.dp))
+
             Button(
                 onClick = onAddMultipleVideos,
                 shape = CircleShape,
+                contentPadding = compactBtnPad,
                 modifier = Modifier
-                    .height(42.dp)
+                    .heightIn(min = 42.dp)
                     .testTag("queue_add_videos_button")
             ) {
                 Icon(
@@ -201,7 +219,12 @@ private fun QueueHeaderSection(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("添加视频", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = "添加视频",
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
         }
 
@@ -215,8 +238,9 @@ private fun QueueHeaderSection(
                     FilledTonalButton(
                         onClick = onTogglePauseResume,
                         shape = CircleShape,
+                        contentPadding = compactBtnPad,
                         modifier = Modifier
-                            .height(40.dp)
+                            .heightIn(min = 40.dp)
                             .testTag("queue_pause_resume_button")
                     ) {
                         Icon(
@@ -227,7 +251,9 @@ private fun QueueHeaderSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (queueState.isPaused) "继续队列" else "暂停队列",
-                            style = MaterialTheme.typography.labelLarge
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -236,8 +262,9 @@ private fun QueueHeaderSection(
                     FilledTonalButton(
                         onClick = onClearCompleted,
                         shape = CircleShape,
+                        contentPadding = compactBtnPad,
                         modifier = Modifier
-                            .height(40.dp)
+                            .heightIn(min = 40.dp)
                             .testTag("queue_clear_completed_button")
                     ) {
                         Icon(
@@ -248,7 +275,9 @@ private fun QueueHeaderSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "清理已完成 (${queueState.completedCount})",
-                            style = MaterialTheme.typography.labelLarge
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }

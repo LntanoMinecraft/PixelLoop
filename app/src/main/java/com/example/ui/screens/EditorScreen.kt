@@ -25,11 +25,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddToQueue
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -80,6 +83,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.R
@@ -144,68 +148,142 @@ fun EditorScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("editor_scroll_list"),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 116.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // 1. Adaptive-Ratio Spatial Crop Canvas + Aspect Ratio Morphing Bar
-            item {
-                InteractiveCropCanvasCard(
-                    previewBitmap = uiState.currentPreviewBitmap,
-                    videoAspectRatio = videoAspectRatio,
-                    cropRect = uiState.cropRect,
-                    selectedPreset = uiState.aspectPreset,
-                    outputWidth = uiState.outputWidth,
-                    outputHeight = uiState.outputHeight,
-                    currentTimeMs = uiState.currentPreviewTimeMs,
-                    isPlaying = uiState.isPlayingPreview,
-                    onTogglePlayback = onTogglePreviewPlayback,
-                    onSelectPreset = onSelectAspectPreset,
-                    onUpdateCrop = onUpdateCropRect
-                )
-            }
+    val durationMs = uiState.videoMetadata?.durationMs ?: 4000L
 
-            // 2. Filmstrip Timeline & Start/End Trim Range
-            item {
-                val durationMs = uiState.videoMetadata?.durationMs ?: 4000L
-                FilmstripTimelineCard(
-                    thumbnails = uiState.timelineThumbnails,
-                    totalDurationMs = durationMs,
-                    trimStartMs = uiState.trimStartMs,
-                    trimEndMs = uiState.trimEndMs,
-                    playbackSpeed = uiState.playbackSpeed,
-                    onUpdateTrimRange = onUpdateTrimRange
-                )
-            }
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        val isTwoPane = maxWidth >= 700.dp
 
-            // 3. Unified Parameter Console (FPS up to 60fps, Resolution, Playback Speed)
-            item {
-                ParameterConsoleCard(
-                    targetFps = uiState.targetFps,
-                    resolutionPreset = uiState.resolutionPreset,
-                    playbackSpeed = uiState.playbackSpeed,
-                    onUpdateFps = onUpdateFps,
-                    onUpdateResolution = onUpdateResolution,
-                    onUpdateSpeed = onUpdateSpeed
-                )
-            }
+        if (isTwoPane) {
+            // Canonical 2-Pane Adaptive Layout for Medium/Expanded screens (Foldables & Tablets)
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 1160.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp)
+                    .testTag("editor_scroll_list"),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1.05f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    InteractiveCropCanvasCard(
+                        previewBitmap = uiState.currentPreviewBitmap,
+                        videoAspectRatio = videoAspectRatio,
+                        cropRect = uiState.cropRect,
+                        selectedPreset = uiState.aspectPreset,
+                        outputWidth = uiState.outputWidth,
+                        outputHeight = uiState.outputHeight,
+                        currentTimeMs = uiState.currentPreviewTimeMs,
+                        isPlaying = uiState.isPlayingPreview,
+                        onTogglePlayback = onTogglePreviewPlayback,
+                        onSelectPreset = onSelectAspectPreset,
+                        onUpdateCrop = onUpdateCropRect
+                    )
 
-            // 4. Export Summary & Primary Action Card inside scroll flow above Floating Nav Bar
-            item {
-                ExportActionCard(
-                    estimatedSizeBytes = uiState.estimatedSizeBytes,
-                    estimatedFrameCount = uiState.estimatedFrameCount,
-                    outputWidth = uiState.outputWidth,
-                    outputHeight = uiState.outputHeight,
-                    targetFps = uiState.targetFps,
-                    playbackSpeed = uiState.playbackSpeed,
-                    onAddToQueue = onAddToQueue,
-                    onExportGif = onExportGif
-                )
+                    FilmstripTimelineCard(
+                        thumbnails = uiState.timelineThumbnails,
+                        totalDurationMs = durationMs,
+                        trimStartMs = uiState.trimStartMs,
+                        trimEndMs = uiState.trimEndMs,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onUpdateTrimRange = onUpdateTrimRange
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(0.95f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ParameterConsoleCard(
+                        targetFps = uiState.targetFps,
+                        resolutionPreset = uiState.resolutionPreset,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onUpdateFps = onUpdateFps,
+                        onUpdateResolution = onUpdateResolution,
+                        onUpdateSpeed = onUpdateSpeed
+                    )
+
+                    ExportActionCard(
+                        estimatedSizeBytes = uiState.estimatedSizeBytes,
+                        estimatedFrameCount = uiState.estimatedFrameCount,
+                        outputWidth = uiState.outputWidth,
+                        outputHeight = uiState.outputHeight,
+                        targetFps = uiState.targetFps,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onAddToQueue = onAddToQueue,
+                        onExportGif = onExportGif
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 640.dp)
+                    .testTag("editor_scroll_list"),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 116.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    InteractiveCropCanvasCard(
+                        previewBitmap = uiState.currentPreviewBitmap,
+                        videoAspectRatio = videoAspectRatio,
+                        cropRect = uiState.cropRect,
+                        selectedPreset = uiState.aspectPreset,
+                        outputWidth = uiState.outputWidth,
+                        outputHeight = uiState.outputHeight,
+                        currentTimeMs = uiState.currentPreviewTimeMs,
+                        isPlaying = uiState.isPlayingPreview,
+                        onTogglePlayback = onTogglePreviewPlayback,
+                        onSelectPreset = onSelectAspectPreset,
+                        onUpdateCrop = onUpdateCropRect
+                    )
+                }
+
+                item {
+                    FilmstripTimelineCard(
+                        thumbnails = uiState.timelineThumbnails,
+                        totalDurationMs = durationMs,
+                        trimStartMs = uiState.trimStartMs,
+                        trimEndMs = uiState.trimEndMs,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onUpdateTrimRange = onUpdateTrimRange
+                    )
+                }
+
+                item {
+                    ParameterConsoleCard(
+                        targetFps = uiState.targetFps,
+                        resolutionPreset = uiState.resolutionPreset,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onUpdateFps = onUpdateFps,
+                        onUpdateResolution = onUpdateResolution,
+                        onUpdateSpeed = onUpdateSpeed
+                    )
+                }
+
+                item {
+                    ExportActionCard(
+                        estimatedSizeBytes = uiState.estimatedSizeBytes,
+                        estimatedFrameCount = uiState.estimatedFrameCount,
+                        outputWidth = uiState.outputWidth,
+                        outputHeight = uiState.outputHeight,
+                        targetFps = uiState.targetFps,
+                        playbackSpeed = uiState.playbackSpeed,
+                        onAddToQueue = onAddToQueue,
+                        onExportGif = onExportGif
+                    )
+                }
             }
         }
 
@@ -273,6 +351,8 @@ private fun ExportActionCard(
     onAddToQueue: () -> Unit,
     onExportGif: () -> Unit
 ) {
+    val compactBtnPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -315,56 +395,129 @@ private fun ExportActionCard(
                 Text(
                     text = "$outputWidth × $outputHeight px · $targetFps FPS · ${playbackSpeed}x",
                     style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = onAddToQueue,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("add_to_queue_button"),
-                    shape = CircleShape
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AddToQueue,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.btn_add_to_queue),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val stackVertically = maxWidth < 280.dp
 
-                Button(
-                    onClick = onExportGif,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("export_gif_button"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.btn_export_gif),
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                if (stackVertically) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = onAddToQueue,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("add_to_queue_button"),
+                            shape = CircleShape,
+                            contentPadding = compactBtnPadding
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddToQueue,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.btn_add_to_queue),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+
+                        Button(
+                            onClick = onExportGif,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("export_gif_button"),
+                            shape = CircleShape,
+                            contentPadding = compactBtnPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.btn_export_gif),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = onAddToQueue,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("add_to_queue_button"),
+                            shape = CircleShape,
+                            contentPadding = compactBtnPadding
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddToQueue,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.btn_add_to_queue),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+
+                        Button(
+                            onClick = onExportGif,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("export_gif_button"),
+                            shape = CircleShape,
+                            contentPadding = compactBtnPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.btn_export_gif),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                    }
                 }
             }
         }

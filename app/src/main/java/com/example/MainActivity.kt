@@ -18,6 +18,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -45,6 +48,7 @@ import com.example.service.ScreenRecordService
 import com.example.ui.StudioTab
 import com.example.ui.StudioViewModel
 import com.example.ui.components.ExpressiveFloatingNavBar
+import com.example.ui.components.ExpressiveNavigationRail
 import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.GalleryScreen
 import com.example.ui.screens.HomeScreen
@@ -232,104 +236,126 @@ fun PixelLoopAppRoot(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
-                StudioTab.HOME -> {
-                    HomeScreen(
-                        themePreferences = themePrefs,
-                        isRecordingActive = liveRecordingState.isRecording,
-                        recordingElapsedSeconds = liveRecordingState.elapsedSeconds,
-                        countdownValue = countdownValue,
-                        activeQueueCount = queueState.activeBadgeCount,
-                        recentCreations = allCreations,
-                        onToggleDynamicColor = studioViewModel::toggleDynamicColor,
-                        onCycleThemeMode = studioViewModel::cycleThemeMode,
-                        onStartScreenRecord = requestScreenRecord,
-                        onStopLiveRecordAndEdit = stopActiveRecordingAndEdit,
-                        onAddTileToControlCenter = addTileToControlCenter,
-                        onPickLocalVideo = {
-                            videoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                            )
-                        },
-                        onPickMultipleVideosForQueue = {
-                            multiVideoQueuePickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                            )
-                        },
-                        onOpenQueue = { studioViewModel.selectTab(StudioTab.QUEUE) },
-                        onShareCreation = studioViewModel::shareGif,
-                        onOpenGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
-                    )
-                }
+            val useNavigationRail = maxWidth >= 720.dp
 
-                StudioTab.EDITOR -> {
-                    EditorScreen(
-                        uiState = editorState,
-                        onPickVideo = {
-                            videoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+            val mainScreenContent: @Composable (Modifier) -> Unit = { contentModifier ->
+                Box(modifier = contentModifier) {
+                    when (currentTab) {
+                        StudioTab.HOME -> {
+                            HomeScreen(
+                                themePreferences = themePrefs,
+                                isRecordingActive = liveRecordingState.isRecording,
+                                recordingElapsedSeconds = liveRecordingState.elapsedSeconds,
+                                countdownValue = countdownValue,
+                                activeQueueCount = queueState.activeBadgeCount,
+                                recentCreations = allCreations,
+                                onToggleDynamicColor = studioViewModel::toggleDynamicColor,
+                                onCycleThemeMode = studioViewModel::cycleThemeMode,
+                                onStartScreenRecord = requestScreenRecord,
+                                onStopLiveRecordAndEdit = stopActiveRecordingAndEdit,
+                                onAddTileToControlCenter = addTileToControlCenter,
+                                onPickLocalVideo = {
+                                    videoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                    )
+                                },
+                                onPickMultipleVideosForQueue = {
+                                    multiVideoQueuePickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                    )
+                                },
+                                onOpenQueue = { studioViewModel.selectTab(StudioTab.QUEUE) },
+                                onShareCreation = studioViewModel::shareGif,
+                                onOpenGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
                             )
-                        },
-                        onSelectAspectPreset = studioViewModel::selectAspectPreset,
-                        onUpdateCropRect = studioViewModel::updateCropRect,
-                        onUpdateTrimRange = studioViewModel::updateTrimRange,
-                        onTogglePreviewPlayback = studioViewModel::togglePreviewPlayback,
-                        onUpdateFps = studioViewModel::updateTargetFps,
-                        onUpdateResolution = studioViewModel::updateResolutionPreset,
-                        onUpdateSpeed = studioViewModel::updatePlaybackSpeed,
-                        onAddToQueue = studioViewModel::enqueueCurrentEditorVideoToQueue,
-                        onExportGif = studioViewModel::exportCurrentVideoToGif,
-                        onDismissEncodingDialog = studioViewModel::dismissEncodingDialog,
-                        onShareCreation = studioViewModel::shareGif,
-                        onSaveCreationToGallery = studioViewModel::saveGifToSystemGallery,
-                        onNavigateToGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
-                    )
-                }
+                        }
 
-                StudioTab.QUEUE -> {
-                    QueueScreen(
-                        queueState = queueState,
-                        onAddMultipleVideos = {
-                            multiVideoQueuePickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                        StudioTab.EDITOR -> {
+                            EditorScreen(
+                                uiState = editorState,
+                                onPickVideo = {
+                                    videoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                    )
+                                },
+                                onSelectAspectPreset = studioViewModel::selectAspectPreset,
+                                onUpdateCropRect = studioViewModel::updateCropRect,
+                                onUpdateTrimRange = studioViewModel::updateTrimRange,
+                                onTogglePreviewPlayback = studioViewModel::togglePreviewPlayback,
+                                onUpdateFps = studioViewModel::updateTargetFps,
+                                onUpdateResolution = studioViewModel::updateResolutionPreset,
+                                onUpdateSpeed = studioViewModel::updatePlaybackSpeed,
+                                onAddToQueue = studioViewModel::enqueueCurrentEditorVideoToQueue,
+                                onExportGif = studioViewModel::exportCurrentVideoToGif,
+                                onDismissEncodingDialog = studioViewModel::dismissEncodingDialog,
+                                onShareCreation = studioViewModel::shareGif,
+                                onSaveCreationToGallery = studioViewModel::saveGifToSystemGallery,
+                                onNavigateToGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
                             )
-                        },
-                        onTogglePauseResume = studioViewModel::toggleQueuePauseResume,
-                        onClearCompleted = studioViewModel::clearCompletedQueueTasks,
-                        onMoveTaskUp = studioViewModel::moveQueueTaskUp,
-                        onRemoveTask = studioViewModel::removeQueueTask,
-                        onRetryTask = studioViewModel::retryQueueTask,
-                        onUpdateBatchFps = studioViewModel::updateBatchQueueFps,
-                        onUpdateBatchResolution = studioViewModel::updateBatchQueueResolution,
-                        onUpdateBatchSpeed = studioViewModel::updateBatchQueueSpeed,
-                        onShareCreation = studioViewModel::shareGif
-                    )
-                }
+                        }
 
-                StudioTab.GALLERY -> {
-                    GalleryScreen(
-                        creations = allCreations,
-                        onShareCreation = studioViewModel::shareGif,
-                        onSaveToSystemGallery = studioViewModel::saveGifToSystemGallery,
-                        onDeleteCreation = studioViewModel::deleteCreation,
-                        onGoToHome = { studioViewModel.selectTab(StudioTab.HOME) }
-                    )
+                        StudioTab.QUEUE -> {
+                            QueueScreen(
+                                queueState = queueState,
+                                onAddMultipleVideos = {
+                                    multiVideoQueuePickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                    )
+                                },
+                                onTogglePauseResume = studioViewModel::toggleQueuePauseResume,
+                                onClearCompleted = studioViewModel::clearCompletedQueueTasks,
+                                onMoveTaskUp = studioViewModel::moveQueueTaskUp,
+                                onRemoveTask = studioViewModel::removeQueueTask,
+                                onRetryTask = studioViewModel::retryQueueTask,
+                                onUpdateBatchFps = studioViewModel::updateBatchQueueFps,
+                                onUpdateBatchResolution = studioViewModel::updateBatchQueueResolution,
+                                onUpdateBatchSpeed = studioViewModel::updateBatchQueueSpeed,
+                                onShareCreation = studioViewModel::shareGif
+                            )
+                        }
+
+                        StudioTab.GALLERY -> {
+                            GalleryScreen(
+                                creations = allCreations,
+                                onShareCreation = studioViewModel::shareGif,
+                                onSaveToSystemGallery = studioViewModel::saveGifToSystemGallery,
+                                onDeleteCreation = studioViewModel::deleteCreation,
+                                onGoToHome = { studioViewModel.selectTab(StudioTab.HOME) }
+                            )
+                        }
+                    }
                 }
             }
 
-            // MD3E (Material Design 3 Expressive) Floating Pill Navigation Bar
-            ExpressiveFloatingNavBar(
-                currentTab = currentTab,
-                queueCount = queueState.activeBadgeCount,
-                galleryCount = allCreations.size,
-                onSelectTab = studioViewModel::selectTab,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            if (useNavigationRail) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    ExpressiveNavigationRail(
+                        currentTab = currentTab,
+                        queueCount = queueState.activeBadgeCount,
+                        galleryCount = allCreations.size,
+                        onSelectTab = studioViewModel::selectTab
+                    )
+                    mainScreenContent(Modifier.weight(1f).fillMaxSize())
+                }
+            } else {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    mainScreenContent(Modifier.fillMaxSize())
+
+                    // MD3E (Material Design 3 Expressive) Floating Pill Navigation Bar
+                    ExpressiveFloatingNavBar(
+                        currentTab = currentTab,
+                        queueCount = queueState.activeBadgeCount,
+                        galleryCount = allCreations.size,
+                        onSelectTab = studioViewModel::selectTab,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
+            }
         }
     }
 }

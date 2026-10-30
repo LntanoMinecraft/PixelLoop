@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,9 +19,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -54,7 +57,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -88,10 +93,14 @@ fun HomeScreen(
     onOpenGallery: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 960.dp)
                 .testTag("home_screen_list"),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 108.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -125,7 +134,7 @@ fun HomeScreen(
                 }
             }
 
-            // 3. Clean Dual Action Cards: Import Video (Single + Batch Queue) & Screen Record (+ Control Center Tile)
+            // 3. Adaptive Dual Action Cards: 2-Column on Medium/Expanded, 1-Column on Compact
             item {
                 DualCreationHeroSection(
                     isRecordingActive = isRecordingActive,
@@ -184,7 +193,8 @@ private fun ActiveQueueBanner(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 Icon(
                     imageVector = Icons.Filled.QueuePlayNext,
@@ -196,6 +206,8 @@ private fun ActiveQueueBanner(
                     text = "后台队列处理中 ($activeQueueCount 项)",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
@@ -207,6 +219,7 @@ private fun ActiveQueueBanner(
                 Text(
                     text = "查看队列",
                     style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Icon(
@@ -237,7 +250,10 @@ private fun ExpressiveTopHeader(
             text = stringResource(R.string.app_name),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onBackground
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f, fill = false)
         )
 
         Row(
@@ -276,6 +292,7 @@ private fun ExpressiveTopHeader(
                     Text(
                         text = "动态色",
                         style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
                         color = if (themePreferences.useDynamicColor) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
@@ -313,6 +330,7 @@ private fun ExpressiveTopHeader(
                     Text(
                         text = themePreferences.themeMode.label,
                         style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -364,12 +382,13 @@ private fun ActiveRecordingBanner(
             Button(
                 onClick = onStopAndEditClick,
                 shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier
-                    .height(40.dp)
+                    .heightIn(min = 40.dp)
                     .testTag("stop_live_record_button")
             ) {
                 Icon(
@@ -378,7 +397,12 @@ private fun ActiveRecordingBanner(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("停止并编辑", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = "停止并编辑",
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -393,201 +417,328 @@ private fun DualCreationHeroSection(
     onPickLocalVideo: () -> Unit,
     onPickMultipleVideosForQueue: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Card 1: Video to GIF (Single Edit + Multi-Video Batch Queue)
-        Surface(
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val isTwoColumn = maxWidth >= 600.dp
+
+        if (isTwoColumn) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                VideoImportHeroCard(
+                    onPickLocalVideo = onPickLocalVideo,
+                    onPickMultipleVideosForQueue = onPickMultipleVideosForQueue,
+                    modifier = Modifier.weight(1f)
+                )
+                ScreenRecordHeroCard(
+                    isRecordingActive = isRecordingActive,
+                    onStartScreenRecord = onStartScreenRecord,
+                    onStopLiveRecordAndEdit = onStopLiveRecordAndEdit,
+                    onAddTileToControlCenter = onAddTileToControlCenter,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                VideoImportHeroCard(
+                    onPickLocalVideo = onPickLocalVideo,
+                    onPickMultipleVideosForQueue = onPickMultipleVideosForQueue,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                ScreenRecordHeroCard(
+                    isRecordingActive = isRecordingActive,
+                    onStartScreenRecord = onStartScreenRecord,
+                    onStopLiveRecordAndEdit = onStopLiveRecordAndEdit,
+                    onAddTileToControlCenter = onAddTileToControlCenter,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoImportHeroCard(
+    onPickLocalVideo: () -> Unit,
+    onPickMultipleVideosForQueue: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.testTag("import_mp4_card"),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("import_mp4_card"),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.VideoLibrary,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = stringResource(R.string.card_import_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = onPickLocalVideo,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("pick_mp4_button"),
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.VideoLibrary,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.btn_pick_video),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = onPickMultipleVideosForQueue,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("batch_queue_mp4_button"),
-                        shape = CircleShape
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AddToQueue,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.btn_batch_queue),
-                            style = MaterialTheme.typography.labelLarge
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
-            }
-        }
 
-        // Card 2: Screen Recording to GIF + Add Quick Settings Tile to Control Center
-        Surface(
+                Text(
+                    text = stringResource(R.string.card_import_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            AdaptiveDualActionButtons(
+                primaryLabel = stringResource(R.string.btn_pick_video),
+                primaryIcon = Icons.Filled.VideoLibrary,
+                primaryContainerColor = MaterialTheme.colorScheme.primary,
+                primaryContentColor = MaterialTheme.colorScheme.onPrimary,
+                primaryTestTag = "pick_mp4_button",
+                onPrimaryClick = onPickLocalVideo,
+                secondaryLabel = stringResource(R.string.btn_batch_queue),
+                secondaryIcon = Icons.Filled.AddToQueue,
+                secondaryTestTag = "batch_queue_mp4_button",
+                onSecondaryClick = onPickMultipleVideosForQueue
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScreenRecordHeroCard(
+    isRecordingActive: Boolean,
+    onStartScreenRecord: () -> Unit,
+    onStopLiveRecordAndEdit: () -> Unit,
+    onAddTileToControlCenter: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.testTag("screen_record_card"),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("screen_record_card"),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.ScreenShare,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.ScreenShare,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
+                }
 
+                Text(
+                    text = stringResource(R.string.card_record_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            AdaptiveDualActionButtons(
+                primaryLabel = if (isRecordingActive) {
+                    stringResource(R.string.btn_stop_record_now)
+                } else {
+                    stringResource(R.string.btn_start_record)
+                },
+                primaryIcon = Icons.Filled.FiberManualRecord,
+                primaryContainerColor = if (isRecordingActive) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer
+                },
+                primaryContentColor = if (isRecordingActive) {
+                    MaterialTheme.colorScheme.onError
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                },
+                primaryTestTag = "start_screen_record_button",
+                onPrimaryClick = if (isRecordingActive) onStopLiveRecordAndEdit else onStartScreenRecord,
+                secondaryLabel = stringResource(R.string.btn_add_control_center),
+                secondaryIcon = Icons.Filled.DashboardCustomize,
+                secondaryTestTag = "add_control_center_tile_button",
+                onSecondaryClick = onAddTileToControlCenter
+            )
+        }
+    }
+}
+
+/**
+ * Container-aware adaptive dual button layout:
+ * - Uses compact horizontal contentPadding (12.dp) and single-line ellipsis so labels like
+ *   "添加至控制中心" and "批量加入队列" never overflow or clip vertically inside pill buttons.
+ * - Automatically switches from a horizontal Row to a vertical Column when the card width is
+ *   narrow (< 295.dp, e.g. in split-screen, small display, or 2-column medium layout).
+ */
+@Composable
+private fun AdaptiveDualActionButtons(
+    primaryLabel: String,
+    primaryIcon: ImageVector,
+    primaryContainerColor: Color,
+    primaryContentColor: Color,
+    primaryTestTag: String,
+    onPrimaryClick: () -> Unit,
+    secondaryLabel: String,
+    secondaryIcon: ImageVector,
+    secondaryTestTag: String,
+    onSecondaryClick: () -> Unit
+) {
+    val compactPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val stackVertically = maxWidth < 295.dp
+
+        if (stackVertically) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onPrimaryClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(primaryTestTag),
+                    shape = CircleShape,
+                    contentPadding = compactPadding,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryContainerColor,
+                        contentColor = primaryContentColor
+                    )
+                ) {
+                    Icon(
+                        imageVector = primaryIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.card_record_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = primaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                FilledTonalButton(
+                    onClick = onSecondaryClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(secondaryTestTag),
+                    shape = CircleShape,
+                    contentPadding = compactPadding
                 ) {
-                    Button(
-                        onClick = if (isRecordingActive) onStopLiveRecordAndEdit else onStartScreenRecord,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("start_screen_record_button"),
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isRecordingActive) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            },
-                            contentColor = if (isRecordingActive) {
-                                MaterialTheme.colorScheme.onError
-                            } else {
-                                MaterialTheme.colorScheme.onSecondaryContainer
-                            }
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.FiberManualRecord,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isRecordingActive) {
-                                stringResource(R.string.btn_stop_record_now)
-                            } else {
-                                stringResource(R.string.btn_start_record)
-                            },
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+                    Icon(
+                        imageVector = secondaryIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = secondaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = onPrimaryClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag(primaryTestTag),
+                    shape = CircleShape,
+                    contentPadding = compactPadding,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryContainerColor,
+                        contentColor = primaryContentColor
+                    )
+                ) {
+                    Icon(
+                        imageVector = primaryIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = primaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
+                }
 
-                    FilledTonalButton(
-                        onClick = onAddTileToControlCenter,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("add_control_center_tile_button"),
-                        shape = CircleShape
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DashboardCustomize,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.btn_add_control_center),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+                FilledTonalButton(
+                    onClick = onSecondaryClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag(secondaryTestTag),
+                    shape = CircleShape,
+                    contentPadding = compactPadding
+                ) {
+                    Icon(
+                        imageVector = secondaryIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = secondaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
                 }
             }
         }

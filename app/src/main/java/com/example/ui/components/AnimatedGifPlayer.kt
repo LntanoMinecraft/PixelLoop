@@ -20,10 +20,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.R
@@ -177,14 +181,17 @@ fun ExpressiveFloatingNavBar(
     onSelectTab: (StudioTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
+        val isCompactNav = maxWidth < 380.dp
+
         Surface(
+            modifier = Modifier.widthIn(max = 520.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 6.dp,
@@ -206,6 +213,7 @@ fun ExpressiveFloatingNavBar(
                     inactiveIcon = Icons.Outlined.Home,
                     label = stringResource(R.string.nav_home),
                     badgeCount = 0,
+                    isCompact = isCompactNav,
                     onClick = { onSelectTab(StudioTab.HOME) },
                     testTag = "nav_tab_home"
                 )
@@ -216,6 +224,7 @@ fun ExpressiveFloatingNavBar(
                     inactiveIcon = Icons.Outlined.Crop,
                     label = stringResource(R.string.nav_editor),
                     badgeCount = 0,
+                    isCompact = isCompactNav,
                     onClick = { onSelectTab(StudioTab.EDITOR) },
                     testTag = "nav_tab_editor"
                 )
@@ -226,6 +235,7 @@ fun ExpressiveFloatingNavBar(
                     inactiveIcon = Icons.Outlined.QueuePlayNext,
                     label = stringResource(R.string.nav_queue),
                     badgeCount = queueCount,
+                    isCompact = isCompactNav,
                     onClick = { onSelectTab(StudioTab.QUEUE) },
                     testTag = "nav_tab_queue"
                 )
@@ -236,10 +246,158 @@ fun ExpressiveFloatingNavBar(
                     inactiveIcon = Icons.Outlined.AutoAwesomeMotion,
                     label = stringResource(R.string.nav_gallery),
                     badgeCount = galleryCount,
+                    isCompact = isCompactNav,
                     onClick = { onSelectTab(StudioTab.GALLERY) },
                     testTag = "nav_tab_gallery"
                 )
             }
+        }
+    }
+}
+
+/**
+ * Canonical Material 3 Expressive Navigation Rail for Expanded / Tablet / Landscape screens.
+ */
+@Composable
+fun ExpressiveNavigationRail(
+    currentTab: StudioTab,
+    queueCount: Int = 0,
+    galleryCount: Int,
+    onSelectTab: (StudioTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(start = 12.dp, top = 16.dp, bottom = 16.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(horizontal = 10.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            ExpressiveRailItem(
+                selected = currentTab == StudioTab.HOME,
+                activeIcon = Icons.Filled.Home,
+                inactiveIcon = Icons.Outlined.Home,
+                label = stringResource(R.string.nav_home),
+                badgeCount = 0,
+                onClick = { onSelectTab(StudioTab.HOME) },
+                testTag = "nav_tab_home"
+            )
+
+            ExpressiveRailItem(
+                selected = currentTab == StudioTab.EDITOR,
+                activeIcon = Icons.Filled.Crop,
+                inactiveIcon = Icons.Outlined.Crop,
+                label = stringResource(R.string.nav_editor),
+                badgeCount = 0,
+                onClick = { onSelectTab(StudioTab.EDITOR) },
+                testTag = "nav_tab_editor"
+            )
+
+            ExpressiveRailItem(
+                selected = currentTab == StudioTab.QUEUE,
+                activeIcon = Icons.Filled.QueuePlayNext,
+                inactiveIcon = Icons.Outlined.QueuePlayNext,
+                label = stringResource(R.string.nav_queue),
+                badgeCount = queueCount,
+                onClick = { onSelectTab(StudioTab.QUEUE) },
+                testTag = "nav_tab_queue"
+            )
+
+            ExpressiveRailItem(
+                selected = currentTab == StudioTab.GALLERY,
+                activeIcon = Icons.Filled.AutoAwesomeMotion,
+                inactiveIcon = Icons.Outlined.AutoAwesomeMotion,
+                label = stringResource(R.string.nav_gallery),
+                badgeCount = galleryCount,
+                onClick = { onSelectTab(StudioTab.GALLERY) },
+                testTag = "nav_tab_gallery"
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExpressiveRailItem(
+    selected: Boolean,
+    activeIcon: ImageVector,
+    inactiveIcon: ImageVector,
+    label: String,
+    badgeCount: Int,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "railItemBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = ExpressiveSprings.snappyMorph(),
+        label = "railItemContent"
+    )
+
+    Surface(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        shape = RoundedCornerShape(20.dp),
+        color = bgColor
+    ) {
+        Column(
+            modifier = Modifier
+                .width(72.dp)
+                .padding(vertical = 10.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                Icon(
+                    imageVector = if (selected) activeIcon else inactiveIcon,
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+                if (badgeCount > 0) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f)
+                        } else {
+                            MaterialTheme.colorScheme.primaryContainer
+                        }
+                    ) {
+                        Text(
+                            text = badgeCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = contentColor
+            )
         }
     }
 }
@@ -251,11 +409,17 @@ private fun ExpressiveFloatingNavItem(
     inactiveIcon: ImageVector,
     label: String,
     badgeCount: Int,
+    isCompact: Boolean = false,
     onClick: () -> Unit,
     testTag: String
 ) {
     val horizontalPad by animateDpAsState(
-        targetValue = if (selected) 16.dp else 12.dp,
+        targetValue = when {
+            selected && isCompact -> 12.dp
+            selected -> 15.dp
+            isCompact -> 9.dp
+            else -> 12.dp
+        },
         animationSpec = ExpressiveSprings.cornerMorphSpec,
         label = "navItemPad"
     )
@@ -299,18 +463,21 @@ private fun ExpressiveFloatingNavItem(
         Row(
             modifier = Modifier.padding(horizontal = horizontalPad, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 imageVector = if (selected) activeIcon else inactiveIcon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(19.dp)
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
                 color = contentColor
             )
             if (badgeCount > 0) {
@@ -325,6 +492,7 @@ private fun ExpressiveFloatingNavItem(
                     Text(
                         text = badgeCount.toString(),
                         style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
                         color = if (selected) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
