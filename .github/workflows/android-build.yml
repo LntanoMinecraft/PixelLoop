@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: Build Debug APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       # 1. 获取项目代码
@@ -52,7 +52,7 @@ jobs:
 
       # 6. 上传 APK 构建产物
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PixelLoop-debug-apk
           path: app/build/outputs/apk/debug/*.apk
