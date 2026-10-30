@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "PixelLoop 灵动帧"
+rootProject.name = "PixelLoop"
 
 include(":app")

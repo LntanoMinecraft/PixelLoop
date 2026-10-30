@@ -23,7 +23,7 @@ class ExampleRobolectricTest {
     fun `read app_name and verify Android 16 Live Update notification`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("PixelLoop 灵动帧", appName)
+        assertEquals("PixelLoop", appName)
 
         val notification = LiveUpdateNotificationHelper.buildRecordingLiveNotification(
             context = context,
