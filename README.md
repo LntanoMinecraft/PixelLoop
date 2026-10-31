@@ -1,7 +1,9 @@
-<h1 align="center">PixelLoop（灵动帧）</h1><p align="center">让屏幕记录与视频创作变得简单。
+PixelLoop（灵动帧）
 
-一款面向 Android 的屏幕录制与视频转 GIF 创作工具。
-
+<h1 align="center">PixelLoop（灵动帧）</h1><p align="center">
+  <strong>让屏幕记录与视频创作变得简单。</strong>
+</p><p align="center">
+  一款面向 Android 的屏幕录制与视频转 GIF 创作工具。
 </p>---
 
 项目简介
