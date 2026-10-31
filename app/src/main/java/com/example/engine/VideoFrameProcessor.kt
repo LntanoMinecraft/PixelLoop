@@ -346,7 +346,16 @@ class VideoFrameProcessor(private val context: Context) {
     private fun setRetrieverSource(retriever: MediaMetadataRetriever, uri: Uri) {
         if (uri.scheme == "file") {
             retriever.setDataSource(uri.path)
-        } else {
+            return
+        }
+        val openedViaFd = runCatching {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                retriever.setDataSource(pfd.fileDescriptor)
+                true
+            } ?: false
+        }.getOrDefault(false)
+
+        if (!openedViaFd) {
             retriever.setDataSource(context, uri)
         }
     }
@@ -363,27 +372,33 @@ class VideoFrameProcessor(private val context: Context) {
         } else {
             MediaMetadataRetriever.OPTION_CLOSEST_SYNC
         }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            val preferredParams = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                MediaMetadataRetriever.BitmapParams().apply {
-                    preferredConfig = Bitmap.Config.ARGB_8888
-                }
-            } else null
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                val preferredParams = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    MediaMetadataRetriever.BitmapParams().apply {
+                        preferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                } else null
 
-            val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && preferredParams != null) {
-                retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH, preferredParams)
+                val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && preferredParams != null) {
+                    runCatching {
+                        retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH, preferredParams)
+                    }.getOrNull()
+                } else {
+                    runCatching {
+                        retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH)
+                    }.getOrNull()
+                }
+                bmp ?: retriever.getScaledFrameAtTime(
+                    timeUs,
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                    maxW,
+                    maxH
+                )
             } else {
-                retriever.getScaledFrameAtTime(timeUs, option, maxW, maxH)
+                retriever.getFrameAtTime(timeUs, option)
             }
-            bmp ?: retriever.getScaledFrameAtTime(
-                timeUs,
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                maxW,
-                maxH
-            )
-        } else {
-            retriever.getFrameAtTime(timeUs, option)
-        }
+        }.getOrNull()
     }
 
     private fun cropAndScaleBitmap(

@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -848,8 +850,11 @@ private fun InteractiveCropCanvasCard(
                         )
                         Text(
                             text = formatDurationMs(currentTimeMs),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.widthIn(min = 52.dp)
                         )
                     }
                 }
@@ -921,7 +926,9 @@ private fun FilmstripTimelineCard(
                             formatDurationMs(trimEndMs),
                             clippedDurationSec
                         ),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
@@ -1126,8 +1133,13 @@ private fun EncodingProgressDialog(
     currentFrame: Int,
     totalFrames: Int
 ) {
-    val progress = (currentFrame.toFloat() / max(1, totalFrames)).coerceIn(0f, 1f)
-    val percent = (progress * 100).toInt()
+    val rawProgress = (currentFrame.toFloat() / max(1, totalFrames)).coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 120, easing = LinearEasing),
+        label = "encodingProgressSmooth"
+    )
+    val percent = (rawProgress * 100).toInt().coerceIn(0, 100)
 
     Dialog(onDismissRequest = {}) {
         Surface(
@@ -1143,14 +1155,18 @@ private fun EncodingProgressDialog(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        progress = { progress },
+                        progress = { animatedProgress },
                         modifier = Modifier.size(80.dp),
                         strokeWidth = 7.dp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        gapSize = 0.dp
                     )
                     Text(
                         text = "$percent%",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -1164,17 +1180,23 @@ private fun EncodingProgressDialog(
 
                 Text(
                     text = "$currentFrame / $totalFrames 帧",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
 
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { animatedProgress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(CircleShape)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    gapSize = 0.dp,
+                    drawStopIndicator = {}
                 )
             }
         }

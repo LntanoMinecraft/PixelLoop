@@ -373,7 +373,9 @@ private fun ActiveRecordingBanner(
                 )
                 Text(
                     text = "录制中 $formattedTimer",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )

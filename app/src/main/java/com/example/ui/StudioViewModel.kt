@@ -18,11 +18,15 @@ import com.example.engine.NormalizedCropRect
 import com.example.engine.ResolutionPreset
 import com.example.engine.VideoFrameProcessor
 import com.example.engine.VideoSourceMetadata
+import com.example.service.GifProcessingService
 import com.example.service.LiveRecordingState
 import com.example.service.LiveUpdateNotificationHelper
 import com.example.service.ScreenRecordService
 import com.example.ui.components.formatFileSize
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -80,11 +84,13 @@ class StudioViewModel(
     private val frameProcessor: VideoFrameProcessor
 ) : ViewModel() {
 
-    private val batchQueueManager = BatchQueueManager(
+    private val batchQueueManager = BatchQueueManager.getInstance(
         appContext = appContext,
         repository = repository,
         frameProcessor = frameProcessor
     )
+
+    private val backgroundExportScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _currentTab = MutableStateFlow(StudioTab.HOME)
     val currentTab: StateFlow<StudioTab> = _currentTab.asStateFlow()
@@ -405,64 +411,80 @@ class StudioViewModel(
             )
         }
 
-        viewModelScope.launch {
-            val exportResult = frameProcessor.exportVideoToGif(
-                metadata = meta,
-                trimStartMs = state.trimStartMs,
-                trimEndMs = state.trimEndMs,
-                cropRect = state.cropRect,
-                targetFps = state.targetFps,
-                resolutionPreset = state.resolutionPreset,
-                playbackSpeed = state.playbackSpeed,
-                onProgress = { current, total ->
-                    _editorState.update {
-                        it.copy(encodingState = EncodingProgressState.Encoding(current, total))
-                    }
-                    LiveUpdateNotificationHelper.notifyEncodingProgress(
-                        context = appContext,
-                        currentFrame = current,
-                        totalFrames = total,
-                        isComplete = false
-                    )
-                }
-            )
+        GifProcessingService.startEncodingForeground(
+            context = appContext,
+            currentFrame = 0,
+            totalFrames = state.estimatedFrameCount
+        )
 
-            LiveUpdateNotificationHelper.notifyEncodingProgress(
-                context = appContext,
-                currentFrame = 100,
-                totalFrames = 100,
-                isComplete = true
-            )
-
-            exportResult.onSuccess { res ->
-                val entity = GifCreationEntity(
-                    title = state.customTitle.ifBlank { "GIF_${System.currentTimeMillis() % 1000}" },
-                    filePath = res.gifFile.absolutePath,
-                    thumbnailPath = res.thumbnailFile.absolutePath,
-                    width = res.outputWidth,
-                    height = res.outputHeight,
-                    fps = state.targetFps,
-                    durationMs = res.durationMs,
-                    frameCount = res.frameCount,
-                    fileSizeBytes = res.fileSizeBytes,
-                    sourceType = meta.sourceType,
-                    cropRatioLabel = state.aspectPreset.label,
-                    playbackSpeed = state.playbackSpeed
-                )
-                val id = repository.saveCreation(entity)
-                val savedEntity = entity.copy(id = id)
-
-                _editorState.update {
-                    it.copy(encodingState = EncodingProgressState.Completed(savedEntity))
-                }
-            }.onFailure { err ->
-                _editorState.update {
-                    it.copy(
-                        encodingState = EncodingProgressState.Error(
-                            err.localizedMessage ?: "导出失败"
+        backgroundExportScope.launch {
+            try {
+                val exportResult = frameProcessor.exportVideoToGif(
+                    metadata = meta,
+                    trimStartMs = state.trimStartMs,
+                    trimEndMs = state.trimEndMs,
+                    cropRect = state.cropRect,
+                    targetFps = state.targetFps,
+                    resolutionPreset = state.resolutionPreset,
+                    playbackSpeed = state.playbackSpeed,
+                    onProgress = { current, total ->
+                        _editorState.update {
+                            it.copy(encodingState = EncodingProgressState.Encoding(current, total))
+                        }
+                        LiveUpdateNotificationHelper.notifyEncodingProgress(
+                            context = appContext,
+                            currentFrame = current,
+                            totalFrames = total,
+                            isComplete = false
                         )
+                    }
+                )
+
+                LiveUpdateNotificationHelper.notifyEncodingProgress(
+                    context = appContext,
+                    currentFrame = 100,
+                    totalFrames = 100,
+                    isComplete = true
+                )
+
+                exportResult.onSuccess { res ->
+                    val entity = GifCreationEntity(
+                        title = state.customTitle.ifBlank { "GIF_${System.currentTimeMillis() % 1000}" },
+                        filePath = res.gifFile.absolutePath,
+                        thumbnailPath = res.thumbnailFile.absolutePath,
+                        width = res.outputWidth,
+                        height = res.outputHeight,
+                        fps = state.targetFps,
+                        durationMs = res.durationMs,
+                        frameCount = res.frameCount,
+                        fileSizeBytes = res.fileSizeBytes,
+                        sourceType = meta.sourceType,
+                        cropRatioLabel = state.aspectPreset.label,
+                        playbackSpeed = state.playbackSpeed
                     )
+                    val id = repository.saveCreation(entity)
+                    val savedEntity = entity.copy(id = id)
+
+                    _editorState.update {
+                        it.copy(encodingState = EncodingProgressState.Completed(savedEntity))
+                    }
+                    LiveUpdateNotificationHelper.notifyProcessingCompleted(
+                        context = appContext,
+                        title = "动态 GIF 导出完成 · ${savedEntity.title}",
+                        subtitle = "${savedEntity.width}×${savedEntity.height} · ${savedEntity.fps} FPS · 点击查看或分享",
+                        targetTab = LiveUpdateNotificationHelper.TAB_EDITOR
+                    )
+                }.onFailure { err ->
+                    _editorState.update {
+                        it.copy(
+                            encodingState = EncodingProgressState.Error(
+                                err.localizedMessage ?: "导出失败"
+                            )
+                        )
+                    }
                 }
+            } finally {
+                GifProcessingService.stopEncodingForeground(appContext)
             }
         }
     }

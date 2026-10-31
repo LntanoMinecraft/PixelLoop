@@ -416,17 +416,12 @@ private fun ExpressiveFloatingNavItem(
     val horizontalPad by animateDpAsState(
         targetValue = when {
             selected && isCompact -> 12.dp
-            selected -> 15.dp
+            selected -> 14.dp
             isCompact -> 9.dp
             else -> 12.dp
         },
-        animationSpec = ExpressiveSprings.cornerMorphSpec,
+        animationSpec = ExpressiveSprings.snappyMorph(),
         label = "navItemPad"
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.03f else 1.0f,
-        animationSpec = ExpressiveSprings.bouncySpatial(),
-        label = "navItemScale"
     )
     val bgColor by animateColorAsState(
         targetValue = if (selected) {
@@ -450,10 +445,6 @@ private fun ExpressiveFloatingNavItem(
     Surface(
         modifier = Modifier
             .minimumInteractiveComponentSize()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .clip(CircleShape)
             .clickable(onClick = onClick)
             .testTag(testTag),
@@ -491,8 +482,11 @@ private fun ExpressiveFloatingNavItem(
                 ) {
                     Text(
                         text = badgeCount.toString(),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         maxLines = 1,
+                        softWrap = false,
                         color = if (selected) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
@@ -520,14 +514,9 @@ fun ExpressiveMorphChip(
     testTag: String? = null
 ) {
     val cornerRadius by animateDpAsState(
-        targetValue = if (selected) 24.dp else 12.dp,
-        animationSpec = ExpressiveSprings.cornerMorphSpec,
+        targetValue = if (selected) 22.dp else 14.dp,
+        animationSpec = ExpressiveSprings.snappyMorph(),
         label = "chipCornerMorph"
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.02f else 1.0f,
-        animationSpec = ExpressiveSprings.bouncySpatial(),
-        label = "chipScaleMorph"
     )
     val containerColor by animateColorAsState(
         targetValue = if (selected) accentColor else MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -545,10 +534,6 @@ fun ExpressiveMorphChip(
     Surface(
         modifier = taggedModifier
             .minimumInteractiveComponentSize()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .clip(RoundedCornerShape(cornerRadius))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(cornerRadius),
@@ -562,6 +547,8 @@ fun ExpressiveMorphChip(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false,
                 color = contentColor
             )
         }

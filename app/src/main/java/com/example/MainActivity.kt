@@ -195,11 +195,12 @@ fun PixelLoopAppRoot(
         }
     }
 
-    // Handle intents from ScreenRecordService (finished file) or QuickRecordTileService (Control Center tile tap)
+    // Handle intents from ScreenRecordService, QuickRecordTileService, or LiveUpdateNotificationHelper
     LaunchedEffect(incomingIntent) {
         val intent = incomingIntent ?: return@LaunchedEffect
         val recordedPath = intent.getStringExtra(ScreenRecordService.EXTRA_RECORDED_FILE_PATH)
         val autoStartRecord = intent.getBooleanExtra(QuickRecordTileService.EXTRA_AUTO_START_SCREEN_RECORD, false)
+        val openTabExtra = intent.getStringExtra(LiveUpdateNotificationHelper.EXTRA_OPEN_TAB)
 
         if (!recordedPath.isNullOrBlank()) {
             val file = File(recordedPath)
@@ -214,6 +215,15 @@ fun PixelLoopAppRoot(
         } else if (autoStartRecord) {
             studioViewModel.selectTab(StudioTab.HOME)
             requestScreenRecord()
+            onConsumeIntent()
+        } else if (!openTabExtra.isNullOrBlank()) {
+            val targetTab = when (openTabExtra) {
+                LiveUpdateNotificationHelper.TAB_EDITOR -> StudioTab.EDITOR
+                LiveUpdateNotificationHelper.TAB_QUEUE -> StudioTab.QUEUE
+                LiveUpdateNotificationHelper.TAB_GALLERY -> StudioTab.GALLERY
+                else -> StudioTab.HOME
+            }
+            studioViewModel.selectTab(targetTab)
             onConsumeIntent()
         }
     }

@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -49,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -387,10 +391,15 @@ private fun QueueTaskCard(
     onRetry: () -> Unit,
     onShareCreation: (GifCreationEntity) -> Unit
 ) {
-    val progress = if (task.totalFrames > 0) {
+    val rawProgress = if (task.totalFrames > 0) {
         (task.currentFrame.toFloat() / max(1, task.totalFrames)).coerceIn(0f, 1f)
     } else 0f
-    val percent = (progress * 100).toInt()
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 120, easing = LinearEasing),
+        label = "queueProgressSmooth"
+    )
+    val percent = (rawProgress * 100).toInt().coerceIn(0, 100)
 
     Surface(
         modifier = Modifier
@@ -575,15 +584,21 @@ private fun QueueTaskCard(
             if (task.status == QueueTaskStatus.PROCESSING) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     LinearProgressIndicator(
-                        progress = { progress },
+                        progress = { animatedProgress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
-                            .clip(CircleShape)
+                            .clip(CircleShape),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {}
                     )
                     Text(
                         text = "正在编码第 ${task.currentFrame} / ${max(1, task.totalFrames)} 帧 ($percent%)",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -629,7 +644,9 @@ private fun QueueStatusPill(
         color = bgColor
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            modifier = Modifier
+                .widthIn(min = if (status == QueueTaskStatus.PROCESSING) 68.dp else 0.dp)
+                .padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -641,7 +658,11 @@ private fun QueueStatusPill(
             )
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFeatureSettings = "tnum"
+                ),
+                maxLines = 1,
+                softWrap = false,
                 color = contentColor
             )
         }

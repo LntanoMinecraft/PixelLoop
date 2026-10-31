@@ -85,6 +85,7 @@ class ScreenRecordService : Service() {
         densityDpi: Int
     ) {
         // 1. Start Foreground immediately with Android 16 Live Update notification
+        LiveUpdateNotificationHelper.resetRecordingSessionClock()
         val initialNotification = LiveUpdateNotificationHelper.buildRecordingLiveNotification(
             context = this,
             elapsedSeconds = 0
