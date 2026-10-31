@@ -1,13 +1,13 @@
+PixelLoop（灵动帧）
+
 <p align="center">
-  <h1>PixelLoop（灵动帧）</h1>
-  <strong>让屏幕记录与视频创作变得简单</strong>
-  <br />
+  <strong>让屏幕记录与视频创作变得简单</strong><br>
   <sub>一款面向 Android 的屏幕录制与视频转 GIF 创作工具</sub>
 </p>---
 
 📖 项目简介
 
-PixelLoop（灵动帧） 是一款 Android 端的屏幕录制与视频转 GIF 工具，旨在为用户提供简单、直观且高效的移动端创作体验。
+PixelLoop（灵动帧）是一款 Android 端的屏幕录制与视频转 GIF 工具，旨在为用户提供简单、直观且高效的移动端创作体验。
 
 你可以使用它录制屏幕、导入本地视频，通过内置编辑器调整画面和播放参数，最终生成 GIF 动图，并保存或分享自己的作品。
 
@@ -32,7 +32,7 @@ PixelLoop（灵动帧） 是一款 Android 端的屏幕录制与视频转 GIF �
 
 - 将视频片段转换为 GIF 动图。
 - 采用本地编码方式，无需依赖云端转换服务。
-- 支持最高 24 FPS 的帧率设置。
+- 支持最高 60 FPS 的帧率设置。
 - 提供多种输出分辨率选项。
 - 显示导出进度，并支持后台处理。
 
@@ -87,9 +87,7 @@ PixelLoop（灵动帧） 是一款 Android 端的屏幕录制与视频转 GIF �
 
 📥 下载与安装
 
-你可以前往 GitHub Releases 页面获取最新构建的 APK 安装包。
-
-"前往 GitHub Releases 下载 PixelLoop →" (https://github.com/LntanoMinecraft/PixelLoop/releases)
+你可以前往 "GitHub Releases" (https://github.com/LntanoMinecraft/PixelLoop/releases) 页面获取最新构建的 APK 安装包。
 
 ---
 
