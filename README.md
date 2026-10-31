@@ -54,41 +54,52 @@ PixelLoop（灵动帧） 是一款 Android 端的屏幕录制与视频转 GIF �
 
 🛠️ 技术栈
 
-技术| 用途
-Kotlin| 主要开发语言
-Jetpack Compose| 声明式 UI 构建
-Material Design 3| 界面设计体系
-MediaProjection| 屏幕录制
-MediaCodec / MediaExtractor| 视频处理
-Room| 本地数据存储
-Kotlin Coroutines| 异步任务处理
-Gradle| 项目构建
+开发语言
+
+- Kotlin
+
+界面与设计
+
+- Jetpack Compose
+- Material Design 3
+
+媒体处理
+
+- MediaProjection
+- MediaCodec
+- MediaExtractor
+
+数据与异步处理
+
+- Room
+- Kotlin Coroutines
+
+构建工具
+
+- Gradle
+
+---
 
 📱 系统要求
 
-项目| 要求
-最低 Android 版本| Android 7.0（API 24）
-运行平台| Android
-其他说明| 部分系统级功能需要较新版本的 Android 系统支持
+- 最低支持 Android 7.0（API 24）及以上版本。
+- 部分系统级功能需要较新版本的 Android 系统支持。
 
 📥 下载与安装
 
 你可以前往 GitHub Releases 页面获取最新构建的 APK 安装包。
 
-<p align="center">
-  <a href="https://github.com/LntanoMinecraft/PixelLoop/releases">
-    <strong>前往 GitHub Releases 下载 PixelLoop →</strong>
-  </a>
-</p>---
+"前往 GitHub Releases 下载 PixelLoop →" (https://github.com/LntanoMinecraft/PixelLoop/releases)
+
+---
 
 📋 项目信息
 
-项目| 信息
-项目名称| PixelLoop（灵动帧）
-当前版本| 6.0
-包名| "com.aistudio.pixelloop.mrxkqv"
-开发平台| Android
-维护者| LntanoMinecraft
+- 项目名称： PixelLoop（灵动帧）
+- 当前版本： 6.0
+- 包名： "com.aistudio.pixelloop.mrxkqv"
+- 开发平台： Android
+- 维护者： LntanoMinecraft
 
 📄 开源许可证
 
