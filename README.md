@@ -96,7 +96,6 @@ PixelLoop（灵动帧） 是一款 Android 端的屏幕录制与视频转 GIF �
 📋 项目信息
 
 - 项目名称： PixelLoop（灵动帧）
-- 当前版本： 6.0
 - 包名： "com.aistudio.pixelloop.mrxkqv"
 - 开发平台： Android
 - 维护者： LntanoMinecraft
