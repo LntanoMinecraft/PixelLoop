@@ -175,6 +175,20 @@ fun PixelLoopAppRoot(
         }
     }
 
+    val exportNotificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    val ensureNotificationPermission: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            runCatching {
+                exportNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -205,11 +219,8 @@ fun PixelLoopAppRoot(
         if (!recordedPath.isNullOrBlank()) {
             val file = File(recordedPath)
             if (file.exists()) {
-                studioViewModel.loadVideoFromUri(
-                    uri = Uri.fromFile(file),
-                    sourceType = "SCREEN_RECORD",
-                    suggestedTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
-                )
+                ScreenRecordService.clearConsumedRecording()
+                studioViewModel.loadAutoRecordedFileOnce(file)
             }
             onConsumeIntent()
         } else if (autoStartRecord) {
@@ -301,8 +312,14 @@ fun PixelLoopAppRoot(
                                 onUpdateFps = studioViewModel::updateTargetFps,
                                 onUpdateResolution = studioViewModel::updateResolutionPreset,
                                 onUpdateSpeed = studioViewModel::updatePlaybackSpeed,
-                                onAddToQueue = studioViewModel::enqueueCurrentEditorVideoToQueue,
-                                onExportGif = studioViewModel::exportCurrentVideoToGif,
+                                onAddToQueue = {
+                                    ensureNotificationPermission()
+                                    studioViewModel.enqueueCurrentEditorVideoToQueue()
+                                },
+                                onExportGif = {
+                                    ensureNotificationPermission()
+                                    studioViewModel.exportCurrentVideoToGif()
+                                },
                                 onDismissEncodingDialog = studioViewModel::dismissEncodingDialog,
                                 onShareCreation = studioViewModel::shareGif,
                                 onSaveCreationToGallery = studioViewModel::saveGifToSystemGallery,

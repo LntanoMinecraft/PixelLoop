@@ -278,6 +278,8 @@ class VideoFrameProcessor(private val context: Context) {
                     val totalCentiseconds = max(totalFrames * 2, (effectiveDurationMs + 5) / 10)
                     var accumulatedCs = 0
 
+                    onProgress(0, totalFrames)
+
                     for (frameIdx in 0 until totalFrames) {
                         coroutineContext.ensureActive()
 

@@ -119,6 +119,8 @@ class StudioViewModel(
 
     private var previewPlaybackJob: Job? = null
     private var scrubJob: Job? = null
+    private var lastAutoLoadedRecordingPath: String? = null
+    private var lastAutoLoadedTimestampMs: Long = 0L
 
     init {
         // Observe finished screen recordings from ScreenRecordService, register in Works Library, and auto-open in Editor
@@ -127,18 +129,7 @@ class StudioViewModel(
                 recState.latestRecordedFile?.let { file ->
                     if (file.exists()) {
                         ScreenRecordService.clearConsumedRecording()
-                        val recTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
-                        repository.registerScreenRecordingFile(
-                            videoFile = file,
-                            frameProcessor = frameProcessor,
-                            suggestedTitle = recTitle
-                        )
-                        loadVideoFromUri(
-                            uri = Uri.fromFile(file),
-                            sourceType = "SCREEN_RECORD",
-                            suggestedTitle = recTitle
-                        )
-                        _currentTab.value = StudioTab.EDITOR
+                        loadAutoRecordedFileOnce(file)
                     }
                 }
                 recState.statusMessage?.let { msg ->
@@ -197,6 +188,25 @@ class StudioViewModel(
             _countdownSeconds.value = null
             onCountdownFinished()
         }
+    }
+
+    fun loadAutoRecordedFileOnce(file: File) {
+        if (!file.exists()) return
+        val now = System.currentTimeMillis()
+        if (lastAutoLoadedRecordingPath == file.absolutePath && (now - lastAutoLoadedTimestampMs) < 3000L) {
+            _currentTab.value = StudioTab.EDITOR
+            return
+        }
+        lastAutoLoadedRecordingPath = file.absolutePath
+        lastAutoLoadedTimestampMs = now
+
+        val recTitle = "录屏_${file.nameWithoutExtension.takeLast(4)}"
+        loadVideoFromUri(
+            uri = Uri.fromFile(file),
+            sourceType = "SCREEN_RECORD",
+            suggestedTitle = recTitle
+        )
+        _currentTab.value = StudioTab.EDITOR
     }
 
     fun loadVideoFromUri(
@@ -410,6 +420,11 @@ class StudioViewModel(
                 encodingState = EncodingProgressState.Encoding(0, state.estimatedFrameCount)
             )
         }
+
+        LiveUpdateNotificationHelper.beginEncodingSession(
+            context = appContext,
+            totalFrames = state.estimatedFrameCount
+        )
 
         GifProcessingService.startEncodingForeground(
             context = appContext,

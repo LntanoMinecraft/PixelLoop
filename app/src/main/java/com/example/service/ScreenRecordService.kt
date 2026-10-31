@@ -44,6 +44,8 @@ class ScreenRecordService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var mediaRecorder: MediaRecorder? = null
     private var currentOutputFile: File? = null
+    @Volatile
+    private var isStopping: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -84,6 +86,7 @@ class ScreenRecordService : Service() {
         rawHeight: Int,
         densityDpi: Int
     ) {
+        isStopping = false
         // 1. Start Foreground immediately with Android 16 Live Update notification
         LiveUpdateNotificationHelper.resetRecordingSessionClock()
         val initialNotification = LiveUpdateNotificationHelper.buildRecordingLiveNotification(
@@ -120,7 +123,7 @@ class ScreenRecordService : Service() {
             }
             projection.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
-                    if (_recordingState.value.isRecording) {
+                    if (!isStopping && _recordingState.value.isRecording) {
                         stopRecordingAndNotify(openEditor = true)
                     }
                 }
@@ -205,8 +208,12 @@ class ScreenRecordService : Service() {
     }
 
     private fun stopRecordingAndNotify(openEditor: Boolean, deleteFile: Boolean = false) {
+        if (isStopping) return
+        isStopping = true
         timerJob?.cancel()
         val outputFile = currentOutputFile
+        currentOutputFile = null
+        _recordingState.value = _recordingState.value.copy(isRecording = false)
 
         runCatching { mediaRecorder?.stop() }
         cleanupRecorderResources()

@@ -44,19 +44,17 @@ class GifProcessingService : Service() {
                 acquireWakeLockIfNeeded()
 
                 val notification = if (isQueue) {
-                    LiveUpdateNotificationHelper.buildBatchQueueNotification(
+                    LiveUpdateNotificationHelper.buildCurrentBatchQueueNotification(
                         context = this,
-                        currentItemIndex = currentItem,
-                        totalItems = totalItems,
-                        currentTaskTitle = title,
-                        currentFrame = currentFrame,
-                        totalFrames = totalFrames
+                        fallbackItemIndex = currentItem,
+                        fallbackTotalItems = totalItems,
+                        fallbackTitle = title,
+                        fallbackTotalFrames = totalFrames
                     )
                 } else {
-                    LiveUpdateNotificationHelper.buildEncodingNotification(
+                    LiveUpdateNotificationHelper.buildCurrentEncodingNotification(
                         context = this,
-                        currentFrame = currentFrame,
-                        totalFrames = totalFrames
+                        fallbackTotalFrames = totalFrames
                     )
                 }
                 lastNotification = notification
@@ -125,6 +123,9 @@ class GifProcessingService : Service() {
 
     override fun onDestroy() {
         releaseWakeLock()
+        runCatching {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
         super.onDestroy()
     }
 

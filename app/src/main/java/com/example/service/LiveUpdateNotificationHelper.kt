@@ -50,7 +50,7 @@ object LiveUpdateNotificationHelper {
     const val TAB_GALLERY = "GALLERY"
 
     const val RECOMMENDED_MAX_SECONDS = 30
-    private const val MIN_UPDATE_INTERVAL_MS = 280L
+    private const val MIN_UPDATE_INTERVAL_MS = 120L
 
     // Stable timestamps & throttling state to prevent notification progress bar & button jitter
     @Volatile
@@ -62,6 +62,10 @@ object LiveUpdateNotificationHelper {
     private var lastEncodingNotifyElapsedMs: Long = 0L
     @Volatile
     private var lastEncodingNotifiedPercent: Int = -1
+    @Volatile
+    private var activeEncodingCurrentFrame: Int = 0
+    @Volatile
+    private var activeEncodingTotalFrames: Int = 100
 
     @Volatile
     private var queueSessionStartMs: Long = 0L
@@ -71,6 +75,16 @@ object LiveUpdateNotificationHelper {
     private var lastQueueNotifiedPercent: Int = -1
     @Volatile
     private var lastQueueNotifiedItem: Int = -1
+    @Volatile
+    private var activeQueueItemIndex: Int = 1
+    @Volatile
+    private var activeQueueTotalItems: Int = 1
+    @Volatile
+    private var activeQueueTaskTitle: String = ""
+    @Volatile
+    private var activeQueueCurrentFrame: Int = 0
+    @Volatile
+    private var activeQueueTotalFrames: Int = 100
 
     private data class NotificationPalette(
         val builderAccentColor: Int,
@@ -161,8 +175,8 @@ object LiveUpdateNotificationHelper {
 
     /**
      * Builds the Android 16 Live Update notification for active screen recording.
-     * Uses a unified Cobalt/Dynamic progress bar and stable `when` timestamp so neither
-     * the progress bar nor the action buttons twitch on 1-second timer ticks.
+     * Deliberately omits any progress bar during the recording capture stage, displaying
+     * only the live timer, status chip, and quick stop/cancel actions.
      */
     fun buildRecordingLiveNotification(
         context: Context,
@@ -205,19 +219,6 @@ object LiveUpdateNotificationHelper {
         val formattedTimer = String.format("%02d:%02d", mins, secs)
         val shortChipText = "REC $formattedTimer"
 
-        val clampedProgress = ((elapsedSeconds.coerceAtMost(RECOMMENDED_MAX_SECONDS) * 100) / RECOMMENDED_MAX_SECONDS)
-            .coerceIn(2, 100)
-
-        val progressStyle = NotificationCompat.ProgressStyle()
-            .setStyledByProgress(false)
-            .setProgress(clampedProgress)
-            .setProgressSegments(
-                listOf(
-                    NotificationCompat.ProgressStyle.Segment(100)
-                        .setColor(palette.progressTrackActiveColor)
-                )
-            )
-
         return NotificationCompat.Builder(context, CHANNEL_ID_LIVE_UPDATES)
             .setSmallIcon(R.drawable.ic_live_record_notif)
             .setColor(palette.builderAccentColor)
@@ -231,9 +232,8 @@ object LiveUpdateNotificationHelper {
             .setRequestPromotedOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setStyle(progressStyle)
             .setContentIntent(contentPendingIntent)
             .addAction(
                 NotificationCompat.Action.Builder(
@@ -253,7 +253,41 @@ object LiveUpdateNotificationHelper {
     }
 
     /**
+     * Initializes a new single-video GIF encoding notification session so that
+     * both Foreground Service promotion and frame callbacks share consistent progress state.
+     */
+    fun beginEncodingSession(context: Context, totalFrames: Int) {
+        ensureChannel(context)
+        encodingSessionStartMs = System.currentTimeMillis()
+        activeEncodingCurrentFrame = 0
+        activeEncodingTotalFrames = totalFrames.coerceAtLeast(1)
+        lastEncodingNotifiedPercent = 0
+        lastEncodingNotifyElapsedMs = SystemClock.elapsedRealtime()
+
+        if (hasNotificationPermission(context)) {
+            val notification = buildEncodingNotification(
+                context = context,
+                currentFrame = 0,
+                totalFrames = activeEncodingTotalFrames
+            )
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_ENCODING, notification)
+        }
+    }
+
+    /**
+     * Used by [GifProcessingService] when promoting to foreground so it always uses the latest
+     * frame progress and never resets an in-flight export notification back to 0%.
+     */
+    fun buildCurrentEncodingNotification(context: Context, fallbackTotalFrames: Int): Notification {
+        val total = if (activeEncodingTotalFrames > 1) activeEncodingTotalFrames else fallbackTotalFrames.coerceAtLeast(1)
+        val current = activeEncodingCurrentFrame.coerceIn(0, total)
+        return buildEncodingNotification(context, current, total)
+    }
+
+    /**
      * Builds the ongoing Live Update notification for single-video GIF encoding.
+     * Uses `setStyledByProgress(true)` and `Builder.setProgress(100, visualProgress, false)`
+     * so the progress bar fills visibly and smoothly from 0% to 100% across all Android 16 & OEM surfaces.
      */
     fun buildEncodingNotification(
         context: Context,
@@ -269,6 +303,7 @@ object LiveUpdateNotificationHelper {
         val safeTotal = totalFrames.coerceAtLeast(1)
         val safeCurrent = currentFrame.coerceIn(0, safeTotal)
         val percent = ((safeCurrent.toFloat() / safeTotal) * 100).toInt().coerceIn(0, 100)
+        val visualProgress = percent.coerceIn(2, 100)
 
         val openEditorPendingIntent = createOpenAppPendingIntent(
             context = context,
@@ -277,8 +312,9 @@ object LiveUpdateNotificationHelper {
         )
 
         val progressStyle = NotificationCompat.ProgressStyle()
-            .setStyledByProgress(false)
-            .setProgress(percent.coerceAtLeast(2))
+            .setStyledByProgress(true)
+            .setProgressIndeterminate(false)
+            .setProgress(visualProgress)
             .setProgressSegments(
                 listOf(
                     NotificationCompat.ProgressStyle.Segment(100)
@@ -300,6 +336,7 @@ object LiveUpdateNotificationHelper {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setProgress(100, visualProgress, false)
             .setStyle(progressStyle)
             .setContentIntent(openEditorPendingIntent)
             .addAction(
@@ -314,7 +351,6 @@ object LiveUpdateNotificationHelper {
 
     /**
      * Posts or updates an Android 16 Live Update notification for single GIF encoding progress.
-     * Throttled so SystemUI progress bar & action buttons never jitter.
      */
     fun notifyEncodingProgress(
         context: Context,
@@ -322,26 +358,34 @@ object LiveUpdateNotificationHelper {
         totalFrames: Int,
         isComplete: Boolean = false
     ) {
-        if (!hasNotificationPermission(context)) return
         ensureChannel(context)
 
         if (isComplete) {
             encodingSessionStartMs = 0L
             lastEncodingNotifiedPercent = -1
             lastEncodingNotifyElapsedMs = 0L
-            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ENCODING)
+            activeEncodingCurrentFrame = 0
+            if (hasNotificationPermission(context)) {
+                NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ENCODING)
+            }
             return
         }
 
         val safeTotal = totalFrames.coerceAtLeast(1)
-        val percent = ((currentFrame.toFloat() / safeTotal) * 100).toInt().coerceIn(0, 100)
+        val safeCurrent = currentFrame.coerceIn(0, safeTotal)
+        activeEncodingCurrentFrame = safeCurrent
+        activeEncodingTotalFrames = safeTotal
+
+        if (!hasNotificationPermission(context)) return
+
+        val percent = ((safeCurrent.toFloat() / safeTotal) * 100).toInt().coerceIn(0, 100)
         val nowElapsed = SystemClock.elapsedRealtime()
 
-        val isFirstOrLast = currentFrame <= 1 || currentFrame >= safeTotal || lastEncodingNotifiedPercent < 0
+        val isFirstOrLast = safeCurrent <= 1 || safeCurrent >= safeTotal || lastEncodingNotifiedPercent < 0
         val enoughTimePassed = (nowElapsed - lastEncodingNotifyElapsedMs) >= MIN_UPDATE_INTERVAL_MS
-        val percentChangedEnough = kotlin.math.abs(percent - lastEncodingNotifiedPercent) >= 2
+        val percentChanged = percent != lastEncodingNotifiedPercent
 
-        if (!isFirstOrLast && (!enoughTimePassed || !percentChangedEnough)) {
+        if (!isFirstOrLast && (!enoughTimePassed || !percentChanged)) {
             return
         }
 
@@ -353,10 +397,67 @@ object LiveUpdateNotificationHelper {
 
         val notification = buildEncodingNotification(
             context = context,
-            currentFrame = currentFrame,
+            currentFrame = safeCurrent,
             totalFrames = safeTotal
         )
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_ENCODING, notification)
+    }
+
+    /**
+     * Initializes or updates the active queue item state before foreground promotion.
+     */
+    fun beginQueueItemSession(
+        context: Context,
+        currentItemIndex: Int,
+        totalItems: Int,
+        currentTaskTitle: String,
+        totalFrames: Int
+    ) {
+        ensureChannel(context)
+        if (queueSessionStartMs == 0L) {
+            queueSessionStartMs = System.currentTimeMillis()
+        }
+        activeQueueItemIndex = currentItemIndex.coerceAtLeast(1)
+        activeQueueTotalItems = totalItems.coerceAtLeast(1)
+        activeQueueTaskTitle = currentTaskTitle
+        activeQueueCurrentFrame = 0
+        activeQueueTotalFrames = totalFrames.coerceAtLeast(1)
+        lastQueueNotifiedItem = currentItemIndex
+        lastQueueNotifyElapsedMs = SystemClock.elapsedRealtime()
+
+        if (hasNotificationPermission(context)) {
+            val notification = buildBatchQueueNotification(
+                context = context,
+                currentItemIndex = activeQueueItemIndex,
+                totalItems = activeQueueTotalItems,
+                currentTaskTitle = activeQueueTaskTitle,
+                currentFrame = 0,
+                totalFrames = activeQueueTotalFrames
+            )
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_QUEUE, notification)
+        }
+    }
+
+    fun buildCurrentBatchQueueNotification(
+        context: Context,
+        fallbackItemIndex: Int,
+        fallbackTotalItems: Int,
+        fallbackTitle: String,
+        fallbackTotalFrames: Int
+    ): Notification {
+        val itemIdx = if (activeQueueItemIndex > 0) activeQueueItemIndex else fallbackItemIndex.coerceAtLeast(1)
+        val totalItems = if (activeQueueTotalItems > 0) activeQueueTotalItems else fallbackTotalItems.coerceAtLeast(1)
+        val title = activeQueueTaskTitle.ifBlank { fallbackTitle }
+        val totalFrames = if (activeQueueTotalFrames > 1) activeQueueTotalFrames else fallbackTotalFrames.coerceAtLeast(1)
+        val currentFrame = activeQueueCurrentFrame.coerceIn(0, totalFrames)
+        return buildBatchQueueNotification(
+            context = context,
+            currentItemIndex = itemIdx,
+            totalItems = totalItems,
+            currentTaskTitle = title,
+            currentFrame = currentFrame,
+            totalFrames = totalFrames
+        )
     }
 
     /**
@@ -383,6 +484,7 @@ object LiveUpdateNotificationHelper {
 
         val framePercent = ((safeCurrentFrame.toFloat() / safeTotalFrames) * 100).toInt().coerceIn(0, 100)
         val overallPercent = (((safeItemIdx - 1) * 100 + framePercent) / safeTotalItems).coerceIn(0, 100)
+        val visualProgress = overallPercent.coerceIn(2, 100)
 
         val openQueuePendingIntent = createOpenAppPendingIntent(
             context = context,
@@ -391,8 +493,9 @@ object LiveUpdateNotificationHelper {
         )
 
         val progressStyle = NotificationCompat.ProgressStyle()
-            .setStyledByProgress(false)
-            .setProgress(overallPercent.coerceAtLeast(2))
+            .setStyledByProgress(true)
+            .setProgressIndeterminate(false)
+            .setProgress(visualProgress)
             .setProgressSegments(
                 listOf(
                     NotificationCompat.ProgressStyle.Segment(100)
@@ -416,6 +519,7 @@ object LiveUpdateNotificationHelper {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setProgress(100, visualProgress, false)
             .setStyle(progressStyle)
             .setContentIntent(openQueuePendingIntent)
             .addAction(
@@ -430,7 +534,6 @@ object LiveUpdateNotificationHelper {
 
     /**
      * Posts or updates a background queue progress notification for sequential multi-video GIF conversion.
-     * Throttled to prevent SystemUI progress bar and button jitter.
      */
     fun notifyBatchQueueProgress(
         context: Context,
@@ -441,7 +544,6 @@ object LiveUpdateNotificationHelper {
         totalFrames: Int,
         isComplete: Boolean = false
     ) {
-        if (!hasNotificationPermission(context)) return
         ensureChannel(context)
 
         if (isComplete) {
@@ -449,23 +551,36 @@ object LiveUpdateNotificationHelper {
             lastQueueNotifiedPercent = -1
             lastQueueNotifiedItem = -1
             lastQueueNotifyElapsedMs = 0L
-            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_QUEUE)
+            activeQueueCurrentFrame = 0
+            if (hasNotificationPermission(context)) {
+                NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_QUEUE)
+            }
             return
         }
 
         val safeTotalItems = totalItems.coerceAtLeast(1)
         val safeTotalFrames = totalFrames.coerceAtLeast(1)
-        val framePercent = ((currentFrame.toFloat() / safeTotalFrames) * 100).toInt().coerceIn(0, 100)
+        val safeCurrentFrame = currentFrame.coerceIn(0, safeTotalFrames)
+
+        activeQueueItemIndex = currentItemIndex.coerceIn(1, safeTotalItems)
+        activeQueueTotalItems = safeTotalItems
+        activeQueueTaskTitle = currentTaskTitle
+        activeQueueCurrentFrame = safeCurrentFrame
+        activeQueueTotalFrames = safeTotalFrames
+
+        if (!hasNotificationPermission(context)) return
+
+        val framePercent = ((safeCurrentFrame.toFloat() / safeTotalFrames) * 100).toInt().coerceIn(0, 100)
         val overallPercent = (((currentItemIndex - 1).coerceAtLeast(0) * 100 + framePercent) / safeTotalItems)
             .coerceIn(0, 100)
         val nowElapsed = SystemClock.elapsedRealtime()
 
         val itemChanged = currentItemIndex != lastQueueNotifiedItem
-        val isFirstOrLastFrame = currentFrame <= 1 || currentFrame >= safeTotalFrames
+        val isFirstOrLastFrame = safeCurrentFrame <= 1 || safeCurrentFrame >= safeTotalFrames
         val enoughTimePassed = (nowElapsed - lastQueueNotifyElapsedMs) >= MIN_UPDATE_INTERVAL_MS
-        val percentChangedEnough = kotlin.math.abs(overallPercent - lastQueueNotifiedPercent) >= 2
+        val percentChanged = overallPercent != lastQueueNotifiedPercent
 
-        if (!itemChanged && !isFirstOrLastFrame && (!enoughTimePassed || !percentChangedEnough)) {
+        if (!itemChanged && !isFirstOrLastFrame && (!enoughTimePassed || !percentChanged)) {
             return
         }
 
@@ -481,7 +596,7 @@ object LiveUpdateNotificationHelper {
             currentItemIndex = currentItemIndex,
             totalItems = safeTotalItems,
             currentTaskTitle = currentTaskTitle,
-            currentFrame = currentFrame,
+            currentFrame = safeCurrentFrame,
             totalFrames = safeTotalFrames
         )
 

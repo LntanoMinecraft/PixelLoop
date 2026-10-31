@@ -19,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -45,6 +47,7 @@ class GifRepository(
 
     val allCreations: Flow<List<GifCreationEntity>> = gifDao.observeAllCreations()
     val allRecordings: Flow<List<ScreenRecordingEntity>> = gifDao.observeAllRecordings()
+        .map { list -> list.distinctBy { it.videoFilePath } }
 
     val themePreferences: Flow<ThemePreferences> = context.dataStore.data.map { prefs ->
         val modeStr = prefs[themeModeKey] ?: ThemeMode.SYSTEM.name
@@ -80,55 +83,66 @@ class GifRepository(
     /**
      * Registers a screen-recorded MP4 file into the Works Library (`screen_recordings` table)
      * so the user can reload it into the Editor at any time or delete it to free storage.
+     * Protected by [recordingRegistrationMutex] so concurrent callers never insert duplicate rows.
      */
     suspend fun registerScreenRecordingFile(
         videoFile: File,
         frameProcessor: VideoFrameProcessor,
         suggestedTitle: String? = null
     ): ScreenRecordingEntity? = withContext(Dispatchers.IO) {
-        if (!videoFile.exists() || videoFile.length() <= 1024L) {
-            return@withContext null
-        }
+        recordingRegistrationMutex.withLock {
+            if (!videoFile.exists() || videoFile.length() <= 1024L) {
+                return@withLock null
+            }
 
-        val existing = gifDao.getRecordingByPath(videoFile.absolutePath)
-        if (existing != null) {
-            return@withContext existing
-        }
+            val allCurrent = gifDao.observeAllRecordings().first()
+            val matching = allCurrent.filter {
+                it.videoFilePath == videoFile.absolutePath ||
+                    File(it.videoFilePath).name == videoFile.name
+            }
+            if (matching.isNotEmpty()) {
+                // Clean up any historical duplicate rows for the same file
+                matching.drop(1).forEach { dup ->
+                    gifDao.deleteRecordingById(dup.id)
+                }
+                return@withLock matching.first()
+            }
 
-        val defaultTitle = suggestedTitle ?: "录屏_${videoFile.nameWithoutExtension.takeLast(4)}"
-        val uri = Uri.fromFile(videoFile)
-        val metaResult = frameProcessor.inspectVideo(
-            uri = uri,
-            sourceType = "SCREEN_RECORD",
-            fallbackTitle = defaultTitle
-        )
-        val meta = metaResult.getOrNull() ?: return@withContext null
+            val defaultTitle = suggestedTitle ?: "录屏_${videoFile.nameWithoutExtension.takeLast(4)}"
+            val uri = Uri.fromFile(videoFile)
+            val metaResult = frameProcessor.inspectVideo(
+                uri = uri,
+                sourceType = "SCREEN_RECORD",
+                fallbackTitle = defaultTitle
+            )
+            val meta = metaResult.getOrNull() ?: return@withLock null
 
-        val thumbsDir = File(context.filesDir, "recordings_thumbs").apply { mkdirs() }
-        val thumbFile = File(thumbsDir, "rec_thumb_${videoFile.nameWithoutExtension}.png")
-        if (!thumbFile.exists()) {
-            val frameBmp = frameProcessor.extractPreviewFrame(uri, 0L, maxDimension = 360)
-            if (frameBmp != null) {
-                runCatching {
-                    FileOutputStream(thumbFile).use { out ->
-                        frameBmp.compress(Bitmap.CompressFormat.PNG, 85, out)
+            val thumbsDir = File(context.filesDir, "recordings_thumbs").apply { mkdirs() }
+            val thumbFile = File(thumbsDir, "rec_thumb_${videoFile.nameWithoutExtension}.png")
+            if (!thumbFile.exists()) {
+                val frameBmp = frameProcessor.extractPreviewFrame(uri, 0L, maxDimension = 360)
+                if (frameBmp != null) {
+                    runCatching {
+                        FileOutputStream(thumbFile).use { out ->
+                            frameBmp.compress(Bitmap.CompressFormat.PNG, 85, out)
+                        }
                     }
                 }
             }
-        }
 
-        val entity = ScreenRecordingEntity(
-            title = defaultTitle,
-            videoFilePath = videoFile.absolutePath,
-            thumbnailPath = thumbFile.absolutePath,
-            width = meta.width,
-            height = meta.height,
-            durationMs = meta.durationMs,
-            fileSizeBytes = videoFile.length(),
-            createdAt = videoFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
-        )
-        val id = gifDao.insertRecording(entity)
-        entity.copy(id = id)
+            val entity = ScreenRecordingEntity(
+                title = defaultTitle,
+                videoFilePath = videoFile.absolutePath,
+                thumbnailPath = thumbFile.absolutePath,
+                width = meta.width,
+                height = meta.height,
+                durationMs = meta.durationMs,
+                fileSizeBytes = videoFile.length(),
+                createdAt = videoFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()
+            )
+            val id = gifDao.insertRecording(entity)
+            entity.copy(id = id)
+        }
     }
 
     /**
@@ -136,6 +150,7 @@ class GifRepository(
      * - Imports any previously recorded `.mp4` files that weren't tracked in the database yet
      * - Cleans up corrupted 0-byte `.mp4` files
      * - Removes database entries whose underlying `.mp4` file no longer exists on disk
+     * - Deduplicates any duplicate rows pointing to the same `.mp4` file
      */
     suspend fun syncRecordingsDirectory(frameProcessor: VideoFrameProcessor) = withContext(Dispatchers.IO) {
         runCatching {
@@ -153,29 +168,41 @@ class GifRepository(
                 }
             }
 
-            // Prune database entries if file was removed externally
-            val dbRecordings = gifDao.observeAllRecordings().first()
-            for (rec in dbRecordings) {
-                val f = File(rec.videoFilePath)
-                if (!f.exists()) {
-                    File(rec.thumbnailPath).delete()
-                    gifDao.deleteRecordingById(rec.id)
+            recordingRegistrationMutex.withLock {
+                val dbRecordings = gifDao.observeAllRecordings().first()
+                val seenPaths = mutableSetOf<String>()
+                for (rec in dbRecordings) {
+                    val f = File(rec.videoFilePath)
+                    if (!f.exists()) {
+                        File(rec.thumbnailPath).delete()
+                        gifDao.deleteRecordingById(rec.id)
+                    } else if (!seenPaths.add(rec.videoFilePath)) {
+                        // Remove duplicate database row while keeping the file for the primary row
+                        gifDao.deleteRecordingById(rec.id)
+                    }
                 }
             }
         }
     }
 
     /**
-     * Deletes a screen recording MP4 file, its thumbnail, and its database entry to reclaim storage.
+     * Deletes a screen recording MP4 file, its thumbnail, and all matching database entries to reclaim storage.
      */
     suspend fun deleteScreenRecording(entity: ScreenRecordingEntity) = withContext(Dispatchers.IO) {
-        runCatching {
-            val videoFile = File(entity.videoFilePath)
-            if (videoFile.exists()) videoFile.delete()
-            val thumbFile = File(entity.thumbnailPath)
-            if (thumbFile.exists()) thumbFile.delete()
+        recordingRegistrationMutex.withLock {
+            runCatching {
+                val videoFile = File(entity.videoFilePath)
+                if (videoFile.exists()) videoFile.delete()
+                val thumbFile = File(entity.thumbnailPath)
+                if (thumbFile.exists()) thumbFile.delete()
+            }
+            gifDao.deleteRecordingById(entity.id)
+            val remainingDuplicates = gifDao.observeAllRecordings().first()
+                .filter { it.videoFilePath == entity.videoFilePath }
+            for (dup in remainingDuplicates) {
+                gifDao.deleteRecordingById(dup.id)
+            }
         }
-        gifDao.deleteRecordingById(entity.id)
     }
 
     /**
@@ -275,5 +302,9 @@ class GifRepository(
             }
             context.startActivity(chooser)
         }
+    }
+
+    companion object {
+        private val recordingRegistrationMutex = Mutex()
     }
 }

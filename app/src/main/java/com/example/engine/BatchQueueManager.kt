@@ -322,6 +322,14 @@ class BatchQueueManager(
                 val currentItemNumber = (snapshot.items.indexOfFirst { it.id == nextTask.id } + 1)
                     .coerceAtLeast(1)
 
+                LiveUpdateNotificationHelper.beginQueueItemSession(
+                    context = appContext,
+                    currentItemIndex = currentItemNumber,
+                    totalItems = totalQueueItems,
+                    currentTaskTitle = nextTask.metadata.displayName,
+                    totalFrames = 100
+                )
+
                 // Promote process to Foreground Service + WakeLock so backgrounding never freezes GIF encoding
                 GifProcessingService.startQueueForeground(
                     context = appContext,
