@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -76,9 +77,11 @@ class VideoFrameProcessor(private val context: Context) {
     // Memory cache for timeline filmstrip thumbnails & scrub frames to keep UI at 60/120fps
     private val frameCache = object : LruCache<String, Bitmap>(28 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int {
-            return value.allocationByteCount / 1024
+            return (value.allocationByteCount / 1024).coerceAtLeast(1)
         }
     }
+
+    private val scalePaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     suspend fun inspectVideo(
         uri: Uri,
@@ -130,6 +133,7 @@ class VideoFrameProcessor(private val context: Context) {
         count: Int = 8
     ): List<Bitmap> = withContext(Dispatchers.IO) {
         val result = mutableListOf<Bitmap>()
+        val localFilePath = uri.path?.takeIf { uri.scheme == "file" }
         val retriever = MediaMetadataRetriever()
         try {
             setRetrieverSource(retriever, uri)
@@ -142,13 +146,25 @@ class VideoFrameProcessor(private val context: Context) {
                     result.add(cached)
                     continue
                 }
-                val bmp = decodeScaledFrame(
-                    retriever = retriever,
-                    timeUs = timeMs * 1000L,
-                    maxW = 160,
-                    maxH = 160,
-                    preciseOption = false
-                )
+
+                // Prefer direct ImageReader lossless RGBA frame if available
+                val directRgba = localFilePath?.let { path ->
+                    ScreenCaptureRgbaCache.getLosslessFrameAt(path, timeMs, maxToleranceMs = 350L)
+                }
+                val bmp = if (directRgba != null) {
+                    val thumb = scaleBitmapSrgb(directRgba, 160, 160)
+                    if (thumb !== directRgba) directRgba.recycle()
+                    thumb
+                } else {
+                    decodeScaledFrame(
+                        retriever = retriever,
+                        timeUs = timeMs * 1000L,
+                        maxW = 160,
+                        maxH = 160,
+                        preciseOption = false
+                    )
+                }
+
                 if (bmp != null) {
                     frameCache.put(cacheKey, bmp)
                     result.add(bmp)
@@ -176,6 +192,18 @@ class VideoFrameProcessor(private val context: Context) {
         if (cached != null && !cached.isRecycled) {
             return@withContext cached
         }
+
+        val localFilePath = uri.path?.takeIf { uri.scheme == "file" }
+        val directRgba = localFilePath?.let { path ->
+            ScreenCaptureRgbaCache.getLosslessFrameAt(path, bucketTimeMs, maxToleranceMs = 250L)
+        }
+        if (directRgba != null) {
+            val scaled = scaleBitmapSrgb(directRgba, maxDimension, maxDimension)
+            if (scaled !== directRgba) directRgba.recycle()
+            frameCache.put(cacheKey, scaled)
+            return@withContext scaled
+        }
+
         val retriever = MediaMetadataRetriever()
         try {
             setRetrieverSource(retriever, uri)
@@ -222,7 +250,7 @@ class VideoFrameProcessor(private val context: Context) {
     }
 
     /**
-     * Executes full frame extraction, spatial cropping, scaling, and GIF89a LZW encoding
+     * Executes full frame extraction, sRGB calibration, spatial cropping, scaling, and GIF89a LZW encoding
      * on Dispatchers.Default with accurate centisecond frame pacing (supporting 5..60 FPS).
      */
     suspend fun exportVideoToGif(
@@ -241,9 +269,6 @@ class VideoFrameProcessor(private val context: Context) {
             val sourceDurationMs = (validEndMs - validStartMs).coerceAtLeast(200L)
 
             val effectiveDurationMs = (sourceDurationMs / playbackSpeed).roundToInt().coerceAtLeast(200)
-            // Note: GIF89a decoders universally throttle frame delays < 2 centiseconds (20ms = 50fps ceiling).
-            // For 30/45/60 FPS, we sample at the requested FPS (up to 50Hz effective GIF tick) and use a
-            // Bresenham centisecond accumulator so playback speed matches real-time 1:1 with zero lag!
             val clampedFps = targetFps.coerceIn(5, 60)
             val effectiveGifFps = min(50, clampedFps)
             val totalFrames = ((effectiveDurationMs / 1000f) * effectiveGifFps).roundToInt().coerceIn(4, 240)
@@ -255,7 +280,7 @@ class VideoFrameProcessor(private val context: Context) {
                 resolutionPreset = resolutionPreset
             )
 
-            // Compute exact decode target size so hardware decoder downsamples directly during decode
+            // Compute exact decode target size so hardware decoder downsamples cleanly without OOM
             val decodeMaxW = (outWidth / cropRect.widthFraction).roundToInt().coerceIn(outWidth, metadata.width)
             val decodeMaxH = (outHeight / cropRect.heightFraction).roundToInt().coerceIn(outHeight, metadata.height)
 
@@ -264,6 +289,7 @@ class VideoFrameProcessor(private val context: Context) {
             val gifFile = File(gifsDir, "PixelLoop_${timestamp}.gif")
             val thumbFile = File(gifsDir, "PixelLoop_${timestamp}_thumb.png")
 
+            val localFilePath = metadata.uri.path?.takeIf { metadata.uri.scheme == "file" }
             val retriever = MediaMetadataRetriever()
             var firstCroppedFrame: Bitmap? = null
 
@@ -271,10 +297,13 @@ class VideoFrameProcessor(private val context: Context) {
                 setRetrieverSource(retriever, metadata.uri)
 
                 FileOutputStream(gifFile).use { fos ->
-                    val encoder = AnimatedGifEncoder(fos)
-                    encoder.start(outWidth, outHeight, loopCount = 0)
+                    val encoder = AnimatedGifEncoder(fos).apply {
+                        // Force quality = 1 (full 1:1 pixel sampling) and disable flat-UI dithering noise
+                        setQuality(1)
+                        setDither(false)
+                        start(outWidth, outHeight, loopCount = 0)
+                    }
 
-                    // Exact centisecond accumulator so total GIF duration equals effectiveDurationMs
                     val totalCentiseconds = max(totalFrames * 2, (effectiveDurationMs + 5) / 10)
                     var accumulatedCs = 0
 
@@ -286,12 +315,14 @@ class VideoFrameProcessor(private val context: Context) {
                         val fraction = if (totalFrames <= 1) 0f else frameIdx.toFloat() / (totalFrames - 1)
                         val sampleTimeMs = validStartMs + (fraction * sourceDurationMs).toLong()
 
-                        // Calculate exact centiseconds for this frame without rounding drift
                         val targetNextCs = (((frameIdx + 1) * totalCentiseconds).toFloat() / totalFrames).roundToInt()
                         val frameDelayCs = max(2, targetNextCs - accumulatedCs)
                         accumulatedCs += frameDelayCs
 
-                        val rawFrame = decodeScaledFrame(
+                        // 1. Prefer direct lossless RGBA frame captured by ImageReader if available
+                        val rawFrame = localFilePath?.let { path ->
+                            ScreenCaptureRgbaCache.getLosslessFrameAt(path, sampleTimeMs, maxToleranceMs = 180L)
+                        } ?: decodeScaledFrame(
                             retriever = retriever,
                             timeUs = sampleTimeMs * 1000L,
                             maxW = decodeMaxW,
@@ -299,6 +330,7 @@ class VideoFrameProcessor(private val context: Context) {
                             preciseOption = true
                         ) ?: generateFallbackFrame(outWidth, outHeight, frameIdx, totalFrames)
 
+                        // 2. Crop, scale, and calibrate into standard sRGB ARGB_8888
                         val croppedAndScaled = cropAndScaleBitmap(
                             source = rawFrame,
                             cropRect = cropRect,
@@ -374,9 +406,9 @@ class VideoFrameProcessor(private val context: Context) {
         } else {
             MediaMetadataRetriever.OPTION_CLOSEST_SYNC
         }
-        return runCatching {
+        val decoded = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                val preferredParams = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val preferredParams = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     MediaMetadataRetriever.BitmapParams().apply {
                         preferredConfig = Bitmap.Config.ARGB_8888
                     }
@@ -400,7 +432,37 @@ class VideoFrameProcessor(private val context: Context) {
             } else {
                 retriever.getFrameAtTime(timeUs, option)
             }
-        }.getOrNull()
+        }.getOrNull() ?: return null
+
+        // Calibrate Display P3 / wide-gamut / RGB_565 frames to standard sRGB ARGB_8888
+        val calibrated = ScreenCaptureRgbaCache.calibrateBitmapToSrgb(decoded)
+        if (calibrated !== decoded) {
+            decoded.recycle()
+        }
+        return calibrated
+    }
+
+    private fun scaleBitmapSrgb(source: Bitmap, maxW: Int, maxH: Int): Bitmap {
+        val calibrated = ScreenCaptureRgbaCache.calibrateBitmapToSrgb(source)
+        val srcW = calibrated.width.coerceAtLeast(1)
+        val srcH = calibrated.height.coerceAtLeast(1)
+        val scale = min(1f, min(maxW.toFloat() / srcW, maxH.toFloat() / srcH))
+        val dstW = (srcW * scale).roundToInt().coerceAtLeast(16)
+        val dstH = (srcH * scale).roundToInt().coerceAtLeast(16)
+        if (dstW == srcW && dstH == srcH) return calibrated
+
+        val dst = ScreenCaptureRgbaCache.createSrgbBitmap(dstW, dstH)
+        val canvas = Canvas(dst)
+        canvas.drawBitmap(
+            calibrated,
+            Rect(0, 0, srcW, srcH),
+            Rect(0, 0, dstW, dstH),
+            scalePaint
+        )
+        if (calibrated !== source) {
+            calibrated.recycle()
+        }
+        return dst
     }
 
     private fun cropAndScaleBitmap(
@@ -409,26 +471,29 @@ class VideoFrameProcessor(private val context: Context) {
         targetWidth: Int,
         targetHeight: Int
     ): Bitmap {
-        val srcW = source.width
-        val srcH = source.height
+        val calibratedSource = ScreenCaptureRgbaCache.calibrateBitmapToSrgb(source)
+        val srcW = calibratedSource.width
+        val srcH = calibratedSource.height
         val cropX = (cropRect.left * srcW).roundToInt().coerceIn(0, max(0, srcW - 8))
         val cropY = (cropRect.top * srcH).roundToInt().coerceIn(0, max(0, srcH - 8))
         val cropW = (cropRect.widthFraction * srcW).roundToInt().coerceIn(8, srcW - cropX)
         val cropH = (cropRect.heightFraction * srcH).roundToInt().coerceIn(8, srcH - cropY)
 
-        val cropped = Bitmap.createBitmap(source, cropX, cropY, cropW, cropH)
-        if (cropped.width == targetWidth && cropped.height == targetHeight) {
-            return cropped
+        // Render cropped region directly into a standard sRGB ARGB_8888 target Bitmap
+        val targetSrgb = ScreenCaptureRgbaCache.createSrgbBitmap(targetWidth, targetHeight)
+        val canvas = Canvas(targetSrgb)
+        val srcRect = Rect(cropX, cropY, cropX + cropW, cropY + cropH)
+        val dstRect = Rect(0, 0, targetWidth, targetHeight)
+        canvas.drawBitmap(calibratedSource, srcRect, dstRect, scalePaint)
+
+        if (calibratedSource !== source) {
+            calibratedSource.recycle()
         }
-        val scaled = Bitmap.createScaledBitmap(cropped, targetWidth, targetHeight, true)
-        if (scaled !== cropped) {
-            cropped.recycle()
-        }
-        return scaled
+        return targetSrgb
     }
 
     private fun generateFallbackFrame(w: Int, h: Int, index: Int, total: Int): Bitmap {
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val bmp = ScreenCaptureRgbaCache.createSrgbBitmap(w, h)
         val canvas = Canvas(bmp)
         canvas.drawColor(Color.rgb(24, 28, 42))
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)

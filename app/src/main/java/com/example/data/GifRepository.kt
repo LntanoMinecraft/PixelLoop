@@ -192,6 +192,7 @@ class GifRepository(
         recordingRegistrationMutex.withLock {
             runCatching {
                 val videoFile = File(entity.videoFilePath)
+                com.example.engine.ScreenCaptureRgbaCache.clearFramesForFile(videoFile)
                 if (videoFile.exists()) videoFile.delete()
                 val thumbFile = File(entity.thumbnailPath)
                 if (thumbFile.exists()) thumbFile.delete()
@@ -214,6 +215,7 @@ class GifRepository(
             val currentList = gifDao.observeAllRecordings().first()
             for (rec in currentList) {
                 val vf = File(rec.videoFilePath)
+                com.example.engine.ScreenCaptureRgbaCache.clearFramesForFile(vf)
                 if (vf.exists()) {
                     freedBytes += vf.length()
                     vf.delete()
@@ -226,6 +228,7 @@ class GifRepository(
             }
             val recordingsDir = File(context.filesDir, "recordings")
             recordingsDir.listFiles()?.forEach { f ->
+                com.example.engine.ScreenCaptureRgbaCache.clearFramesForFile(f)
                 freedBytes += f.length()
                 f.delete()
             }

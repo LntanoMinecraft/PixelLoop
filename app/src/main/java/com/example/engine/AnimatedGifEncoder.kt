@@ -7,9 +7,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * High-speed Pure-Kotlin GIF89a Animated Encoder featuring an Adaptive 256-Color
- * Median-Cut Quantizer (RGB555 histogram + O(1) lookup table cache) for accurate,
- * distortion-free color reproduction and fast LZW stream compression at high resolutions.
+ * High-precision Pure-Kotlin GIF89a Animated Encoder featuring:
+ * - Full 1:1 pixel sampling (`setQuality(1)` by default, zero pixel skipping)
+ * - 18-bit RGB666 histogram + Exact 24-bit RGB888 centroid accumulation (eliminates RGB555 gray shift & banding)
+ * - Per-frame 256-color Local Color Table (LCT) so every frame preserves 100% of its UI/video palette
+ * - Noise-free flat UI & text mapping (`setDither(false)` by default to eliminate snow speckles & flicker)
  */
 class AnimatedGifEncoder(rawOutputStream: OutputStream) {
 
@@ -20,24 +22,47 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
     private var started = false
     private var firstFrameWritten = false
 
+    // Quality = 1 means every single pixel is sampled (step = 1) with maximum color accuracy
+    private var sampleQuality: Int = 1
+
+    // Disabled by default for screen recordings & flat UI/text to prevent snow noise and frame flicker
+    private var ditheringEnabled: Boolean = false
+
     private var pixelBuffer = IntArray(0)
     private var indexedPixels = ByteArray(0)
 
-    // 256-entry RGB palette (768 bytes) + unpacked R, G, B arrays for fast nearest-color search
+    // 256-entry RGB palette (768 bytes) + unpacked 8-bit R, G, B arrays for nearest-color search
     private val paletteRgb = ByteArray(256 * 3)
     private val palR = IntArray(256)
     private val palG = IntArray(256)
     private val palB = IntArray(256)
 
-    // 15-bit RGB555 (32,768 entries) lookup table -> palette index (0..255), or -1 if not yet cached
-    private val rgb555Lut = IntArray(32768) { -1 }
-    private val histogram = IntArray(32768)
+    // 18-bit RGB666 (64 x 64 x 64 = 262,144 entries) lookup table & histogram
+    // Compact memory footprint (~2 MB total reused across all frames) to prevent GC churn & OOM
+    private val rgb666Lut = IntArray(262_144) { -1 }
+    private val histogram = IntArray(262_144)
 
     // Pre-allocated LZW working buffers to avoid GC churn during high-FPS / high-res encoding
     private val lzwTableSize = 5003
     private val lzwHashKeys = IntArray(lzwTableSize)
     private val lzwHashValues = IntArray(lzwTableSize)
     private val lzwSubBlock = ByteArray(255)
+
+    /**
+     * Sets color quantization sampling factor.
+     * `1` = highest precision (every pixel sampled, zero skipping).
+     */
+    fun setQuality(quality: Int) {
+        sampleQuality = quality.coerceAtLeast(1)
+    }
+
+    /**
+     * Controls ordered micro-dithering.
+     * Keep `false` (default) for screen recordings, flat UI, and sharp text to avoid speckle noise.
+     */
+    fun setDither(enable: Boolean) {
+        ditheringEnabled = enable
+    }
 
     fun start(targetWidth: Int, targetHeight: Int, loopCount: Int = 0) {
         width = targetWidth.coerceAtLeast(16)
@@ -50,34 +75,40 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
         }
         started = true
         firstFrameWritten = false
-        rgb555Lut.fill(-1)
+        rgb666Lut.fill(-1)
     }
 
     /**
-     * Adds a single Bitmap frame to the animated GIF stream.
-     * Builds the adaptive 256-color palette from the first frame for the Global Color Table,
-     * and optionally builds a per-frame Local Color Table if subsequent frames introduce new colors.
+     * Adds a single sRGB Bitmap frame to the animated GIF stream.
+     * Builds an adaptive 256-color Global Color Table on the first frame and a dedicated
+     * 256-color Local Color Table on every subsequent frame so color transitions never wash out.
      *
      * @param bitmap Frame bitmap matching (width, height)
      * @param delayCentiseconds Frame display duration in centiseconds (1/100s, minimum 2 = 20ms)
      */
     fun addFrame(bitmap: Bitmap, delayCentiseconds: Int) {
         check(started) { "start() must be called before addFrame()" }
-        val frameBitmap = if (bitmap.width != width || bitmap.height != height) {
-            Bitmap.createScaledBitmap(bitmap, width, height, true)
+        val calibratedSource = ScreenCaptureRgbaCache.calibrateBitmapToSrgb(bitmap)
+        val frameBitmap = if (calibratedSource.width != width || calibratedSource.height != height) {
+            Bitmap.createScaledBitmap(calibratedSource, width, height, true)
         } else {
-            bitmap
+            calibratedSource
         }
 
         val totalPixels = width * height
         frameBitmap.getPixels(pixelBuffer, 0, width, 0, 0, width, height)
-        if (frameBitmap !== bitmap) {
+        if (frameBitmap !== calibratedSource && frameBitmap !== bitmap) {
             frameBitmap.recycle()
         }
+        if (calibratedSource !== bitmap) {
+            calibratedSource.recycle()
+        }
 
-        if (!firstFrameWritten) {
-            // Build adaptive 256-color palette from the actual frame colors via Median Cut
-            buildAdaptivePaletteFromFrame(totalPixels)
+        // Build exact 256-color adaptive palette for THIS frame at full sampling quality
+        buildAdaptivePaletteFromFrame(totalPixels)
+
+        val isFirstFrame = !firstFrameWritten
+        if (isFirstFrame) {
             writeHeaderAndGlobalColorTable()
             firstFrameWritten = true
         }
@@ -99,7 +130,14 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
         writeShort(0) // Top
         writeShort(width)
         writeShort(height)
-        out.write(0x00) // Use Global Color Table, non-interlaced
+        if (isFirstFrame) {
+            // Frame 0 uses the Global Color Table written immediately above
+            out.write(0x00)
+        } else {
+            // Subsequent frames emit a 256-entry Local Color Table (0x80 LCT flag | 0x07 size=256)
+            out.write(0x87)
+            out.write(paletteRgb)
+        }
 
         // LZW Image Data
         encodeLzwStream(indexedPixels, totalPixels)
@@ -139,37 +177,30 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
 
     /**
      * Builds an accurate 256-color palette from the current frame in `pixelBuffer`
-     * using a 15-bit RGB555 histogram and Median Cut box splitting.
+     * using an 18-bit RGB666 histogram + Exact 24-bit RGB888 centroid accumulation.
+     * When `sampleQuality == 1`, every single pixel (`step = 1`) is sampled.
      */
     private fun buildAdaptivePaletteFromFrame(totalPixels: Int) {
         histogram.fill(0)
-        rgb555Lut.fill(-1)
+        rgb666Lut.fill(-1)
 
-        // Sample every pixel (or stride by 2 on very large frames for <1ms histogram build)
-        val step = if (totalPixels > 300_000) 2 else 1
+        // Strict full-pixel sampling when sampleQuality == 1
+        val step = sampleQuality.coerceAtLeast(1)
         var i = 0
         while (i < totalPixels) {
             val argb = pixelBuffer[i]
-            val r5 = (argb shr 19) and 0x1F
-            val g5 = (argb shr 11) and 0x1F
-            val b5 = (argb shr 3) and 0x1F
-            val idx15 = (r5 shl 10) or (g5 shl 5) or b5
-            histogram[idx15]++
+            val r6 = (argb ushr 18) and 0x3F
+            val g6 = (argb ushr 10) and 0x3F
+            val b6 = (argb ushr 2) and 0x3F
+            val idx18 = (r6 shl 12) or (g6 shl 6) or b6
+            histogram[idx18]++
             i += step
         }
 
-        // Collect all non-empty 15-bit color cells
+        // Count active 18-bit color cells
         var distinctCount = 0
-        for (c in 0 until 32768) {
+        for (c in 0 until 262_144) {
             if (histogram[c] > 0) distinctCount++
-        }
-
-        val activeColors = IntArray(distinctCount)
-        var ptr = 0
-        for (c in 0 until 32768) {
-            if (histogram[c] > 0) {
-                activeColors[ptr++] = c
-            }
         }
 
         if (distinctCount == 0) {
@@ -184,7 +215,79 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
             return
         }
 
-        // Median Cut Boxes (up to 256 boxes)
+        // Map each active 18-bit cell to a compact index (0 until distinctCount)
+        // and accumulate exact 24-bit (8-bit per channel) R, G, B sums so flat UI colors
+        // never suffer from bit-truncation gray shift!
+        val activeColors = IntArray(distinctCount)
+        val activeSumR = LongArray(distinctCount)
+        val activeSumG = LongArray(distinctCount)
+        val activeSumB = LongArray(distinctCount)
+
+        var ptr = 0
+        for (c in 0 until 262_144) {
+            if (histogram[c] > 0) {
+                activeColors[ptr] = c
+                // Temporarily store compact index + 1 inrgb666Lut for O(1) exact 24-bit sum accumulation
+                rgb666Lut[c] = ptr
+                ptr++
+            }
+        }
+
+        i = 0
+        while (i < totalPixels) {
+            val argb = pixelBuffer[i]
+            val r8 = (argb ushr 16) and 0xFF
+            val g8 = (argb ushr 8) and 0xFF
+            val b8 = argb and 0xFF
+            val idx18 = ((r8 ushr 2) shl 12) or ((g8 ushr 2) shl 6) or (b8 ushr 2)
+            val compactIdx = rgb666Lut[idx18]
+            if (compactIdx >= 0) {
+                activeSumR[compactIdx] += r8.toLong()
+                activeSumG[compactIdx] += g8.toLong()
+                activeSumB[compactIdx] += b8.toLong()
+            }
+            i += step
+        }
+
+        // Reset LUT so it can cache palette indices (0..255) during pixel mapping
+        for (idx in 0 until distinctCount) {
+            rgb666Lut[activeColors[idx]] = -1
+        }
+
+        // Fast path: if the frame has <= 256 distinct RGB666 cells, assign each cell its exact
+        // 24-bit average color directly with zero quantization loss!
+        if (distinctCount <= 256) {
+            for (b in 0 until distinctCount) {
+                val c = activeColors[b]
+                val count = histogram[c].toLong().coerceAtLeast(1L)
+                val rAvg = (activeSumR[b] / count).toInt().coerceIn(0, 255)
+                val gAvg = (activeSumG[b] / count).toInt().coerceIn(0, 255)
+                val bAvg = (activeSumB[b] / count).toInt().coerceIn(0, 255)
+
+                palR[b] = rAvg
+                palG[b] = gAvg
+                palB[b] = bAvg
+                paletteRgb[b * 3] = rAvg.toByte()
+                paletteRgb[b * 3 + 1] = gAvg.toByte()
+                paletteRgb[b * 3 + 2] = bAvg.toByte()
+                rgb666Lut[c] = b
+            }
+            for (slot in distinctCount until 256) {
+                val ref = slot % distinctCount
+                palR[slot] = palR[ref]
+                palG[slot] = palG[ref]
+                palB[slot] = palB[ref]
+                paletteRgb[slot * 3] = paletteRgb[ref * 3]
+                paletteRgb[slot * 3 + 1] = paletteRgb[ref * 3 + 1]
+                paletteRgb[slot * 3 + 2] = paletteRgb[ref * 3 + 2]
+            }
+            return
+        }
+
+        // Permutation array so activeColors and activeSumR/G/B stay aligned during Median Cut
+        val order = IntArray(distinctCount) { it }
+
+        // Median Cut Boxes (all 256 slots used for true frame colors)
         val boxStart = IntArray(256)
         val boxEnd = IntArray(256)
         val boxPixelCount = IntArray(256)
@@ -198,18 +301,18 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
         fun computeBoxBounds(boxIdx: Int) {
             val start = boxStart[boxIdx]
             val end = boxEnd[boxIdx]
-            var rMin = 31
+            var rMin = 63
             var rMax = 0
-            var gMin = 31
+            var gMin = 63
             var gMax = 0
-            var bMin = 31
+            var bMin = 63
             var bMax = 0
             var count = 0
-            for (idx in start until end) {
-                val c = activeColors[idx]
-                val r = (c shr 10) and 0x1F
-                val g = (c shr 5) and 0x1F
-                val b = c and 0x1F
+            for (pos in start until end) {
+                val c = activeColors[order[pos]]
+                val r = (c ushr 12) and 0x3F
+                val g = (c ushr 6) and 0x3F
+                val b = c and 0x3F
                 if (r < rMin) rMin = r
                 if (r > rMax) rMax = r
                 if (g < gMin) gMin = g
@@ -232,22 +335,32 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
         computeBoxBounds(0)
         var numBoxes = 1
 
-        // Reserve 240 slots for adaptive median-cut centroids and 16 slots for anchor extremes
-        // so subsequent frames in the animation never suffer from missing black/white/primary anchors
-        val targetAdaptiveBoxes = min(240, distinctCount)
+        // Use all 256 slots for adaptive median-cut centroids:
+        // - First 160 boxes prioritize population-weighted color span (keeps large UI surfaces & gradients ultra-smooth)
+        // - Remaining 96 boxes prioritize pure color span (preserves small colorful badges, icons & text accents)
+        val targetAdaptiveBoxes = min(256, distinctCount)
 
         while (numBoxes < targetAdaptiveBoxes) {
-            // Find splittable box with largest color span * log/weighted population
+            val prioritizePopulation = numBoxes < 160
             var bestBox = -1
-            var bestScore = -1
+            var bestScore = -1L
+
             for (b in 0 until numBoxes) {
                 if (boxEnd[b] - boxStart[b] < 2) continue
                 val rSpan = boxRMax[b] - boxRMin[b]
                 val gSpan = boxGMax[b] - boxGMin[b]
                 val bSpan = boxBMax[b] - boxBMin[b]
-                val maxSpan = max(rSpan, max(gSpan, bSpan))
-                if (maxSpan <= 0) continue
-                val score = maxSpan * 1024 + min(1023, boxPixelCount[b])
+                // Perceptual channel span (green/red weighted slightly higher than blue)
+                val weightedSpan = max(rSpan * 3, max(gSpan * 4, bSpan * 2)).toLong()
+                if (weightedSpan <= 0L) continue
+
+                val score = if (prioritizePopulation) {
+                    val popWeight = 32L - Integer.numberOfLeadingZeros(boxPixelCount[b].coerceAtLeast(1))
+                    weightedSpan * popWeight * popWeight
+                } else {
+                    (weightedSpan shl 20) + boxPixelCount[b].toLong()
+                }
+
                 if (score > bestScore) {
                     bestScore = score
                     bestBox = b
@@ -270,41 +383,42 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
             val start = boxStart[bestBox]
             val end = boxEnd[bestBox]
 
-            // Counting sort activeColors[start until end] along splitAxis (values 0..31)
-            val bucketCounts = IntArray(32)
-            for (idx in start until end) {
-                val c = activeColors[idx]
+            // Counting sort order[start until end] along splitAxis (values 0..63)
+            val bucketCounts = IntArray(64)
+            for (pos in start until end) {
+                val c = activeColors[order[pos]]
                 val key = when (splitAxis) {
-                    0 -> (c shr 10) and 0x1F
-                    1 -> (c shr 5) and 0x1F
-                    else -> c and 0x1F
+                    0 -> (c ushr 12) and 0x3F
+                    1 -> (c ushr 6) and 0x3F
+                    else -> c and 0x3F
                 }
                 bucketCounts[key]++
             }
-            val bucketOffsets = IntArray(32)
+            val bucketOffsets = IntArray(64)
             var running = start
-            for (k in 0 until 32) {
+            for (k in 0 until 64) {
                 bucketOffsets[k] = running
                 running += bucketCounts[k]
             }
-            val tempSlice = activeColors.copyOfRange(start, end)
-            for (c in tempSlice) {
+            val tempOrder = order.copyOfRange(start, end)
+            for (itemIdx in tempOrder) {
+                val c = activeColors[itemIdx]
                 val key = when (splitAxis) {
-                    0 -> (c shr 10) and 0x1F
-                    1 -> (c shr 5) and 0x1F
-                    else -> c and 0x1F
+                    0 -> (c ushr 12) and 0x3F
+                    1 -> (c ushr 6) and 0x3F
+                    else -> c and 0x3F
                 }
-                activeColors[bucketOffsets[key]++] = c
+                order[bucketOffsets[key]++] = itemIdx
             }
 
             // Find median split point weighted by pixel count
             val halfPixels = boxPixelCount[bestBox] / 2
             var accPixels = 0
             var splitIndex = start + 1
-            for (idx in start until end - 1) {
-                accPixels += histogram[activeColors[idx]]
+            for (pos in start until end - 1) {
+                accPixels += histogram[activeColors[order[pos]]]
                 if (accPixels >= halfPixels) {
-                    splitIndex = idx + 1
+                    splitIndex = pos + 1
                     break
                 }
             }
@@ -318,29 +432,23 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
             computeBoxBounds(newBox)
         }
 
-        // Compute weighted RGB centroid for each adaptive box
+        // Compute EXACT 24-bit RGB centroid for each adaptive box using the accumulated 8-bit sums
         for (b in 0 until numBoxes) {
-            var sumR = 0L
-            var sumG = 0L
-            var sumB = 0L
+            var sumR8 = 0L
+            var sumG8 = 0L
+            var sumB8 = 0L
             var totalW = 0L
-            for (idx in boxStart[b] until boxEnd[b]) {
-                val c = activeColors[idx]
-                val w = histogram[c].toLong()
-                val r5 = (c shr 10) and 0x1F
-                val g5 = (c shr 5) and 0x1F
-                val b5 = c and 0x1F
-                val r8 = (r5 shl 3) or (r5 shr 2)
-                val g8 = (g5 shl 3) or (g5 shr 2)
-                val b8 = (b5 shl 3) or (b5 shr 2)
-                sumR += r8 * w
-                sumG += g8 * w
-                sumB += b8 * w
-                totalW += w
+            for (pos in boxStart[b] until boxEnd[b]) {
+                val itemIdx = order[pos]
+                val c = activeColors[itemIdx]
+                sumR8 += activeSumR[itemIdx]
+                sumG8 += activeSumG[itemIdx]
+                sumB8 += activeSumB[itemIdx]
+                totalW += histogram[c].toLong()
             }
-            val rAvg = if (totalW > 0) (sumR / totalW).toInt().coerceIn(0, 255) else 0
-            val gAvg = if (totalW > 0) (sumG / totalW).toInt().coerceIn(0, 255) else 0
-            val bAvg = if (totalW > 0) (sumB / totalW).toInt().coerceIn(0, 255) else 0
+            val rAvg = if (totalW > 0L) ((sumR8 + totalW / 2) / totalW).toInt().coerceIn(0, 255) else 0
+            val gAvg = if (totalW > 0L) ((sumG8 + totalW / 2) / totalW).toInt().coerceIn(0, 255) else 0
+            val bAvg = if (totalW > 0L) ((sumB8 + totalW / 2) / totalW).toInt().coerceIn(0, 255) else 0
 
             palR[b] = rAvg
             palG[b] = gAvg
@@ -350,62 +458,68 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
             paletteRgb[b * 3 + 2] = bAvg.toByte()
         }
 
-        // Fill remaining slots (numBoxes until 256) with anchor colors covering full RGB gamut
-        val anchorColors = intArrayOf(
-            0x000000, 0xFFFFFF, 0x202020, 0x404040, 0x808080, 0xC0C0C0,
-            0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x00C7BE, 0x32ADE6,
-            0x007AFF, 0x5856D6, 0xAF52DE, 0xFF2D55
-        )
         for (slot in numBoxes until 256) {
-            val anchor = anchorColors[(slot - numBoxes) % anchorColors.size]
-            val r = (anchor shr 16) and 0xFF
-            val g = (anchor shr 8) and 0xFF
-            val b = anchor and 0xFF
-            palR[slot] = r
-            palG[slot] = g
-            palB[slot] = b
-            paletteRgb[slot * 3] = r.toByte()
-            paletteRgb[slot * 3 + 1] = g.toByte()
-            paletteRgb[slot * 3 + 2] = b.toByte()
+            val ref = slot % numBoxes
+            palR[slot] = palR[ref]
+            palG[slot] = palG[ref]
+            palB[slot] = palB[ref]
+            paletteRgb[slot * 3] = paletteRgb[ref * 3]
+            paletteRgb[slot * 3 + 1] = paletteRgb[ref * 3 + 1]
+            paletteRgb[slot * 3 + 2] = paletteRgb[ref * 3 + 2]
         }
     }
 
     /**
-     * Maps all pixels in `pixelBuffer` to their nearest palette entry using the O(1) `rgb555Lut` cache
-     * with subtle 2x2 micro-dithering (±2 RGB levels) to preserve smooth gradients without color shift.
+     * Maps all pixels in `pixelBuffer` to their nearest palette entry using the O(1) `rgb666Lut` cache.
+     * By default (`ditheringEnabled == false`), maps flat UI and text deterministically without noise.
      */
     private fun mapPixelsToPalette(totalPixels: Int) {
         val w = width
         val h = height
         var offset = 0
+
+        if (!ditheringEnabled) {
+            while (offset < totalPixels) {
+                val argb = pixelBuffer[offset]
+                val r8 = (argb ushr 16) and 0xFF
+                val g8 = (argb ushr 8) and 0xFF
+                val b8 = argb and 0xFF
+
+                val idx18 = ((r8 ushr 2) shl 12) or ((g8 ushr 2) shl 6) or (b8 ushr 2)
+                var palIdx = rgb666Lut[idx18]
+                if (palIdx == -1) {
+                    palIdx = findNearestPaletteIndex(r8, g8, b8)
+                    rgb666Lut[idx18] = palIdx
+                }
+                indexedPixels[offset] = palIdx.toByte()
+                offset++
+            }
+            return
+        }
+
+        // Optional low-amplitude dither (only when explicitly requested, skipping flat identical neighbors)
         for (y in 0 until h) {
             val yParity = y and 1
             for (x in 0 until w) {
                 val argb = pixelBuffer[offset]
-                // Subtle ±2 level ordered micro-dither prevents banding while keeping 100% accurate hue
-                val dither = if (((x and 1) xor yParity) == 0) 2 else -2
-                val r = ((argb shr 16) and 0xFF) + dither
-                val g = ((argb shr 8) and 0xFF) + dither
-                val b = (argb and 0xFF) + dither
+                val prevArgb = if (x > 0) pixelBuffer[offset - 1] else argb
+                val isFlatUi = (argb and 0xFFFFFF) == (prevArgb and 0xFFFFFF)
+                val dither = if (isFlatUi) 0 else if (((x and 1) xor yParity) == 0) 1 else -1
 
-                val r5 = (r.coerceIn(0, 255)) shr 3
-                val g5 = (g.coerceIn(0, 255)) shr 3
-                val b5 = (b.coerceIn(0, 255)) shr 3
+                val r8 = (((argb ushr 16) and 0xFF) + dither).coerceIn(0, 255)
+                val g8 = (((argb ushr 8) and 0xFF) + dither).coerceIn(0, 255)
+                val b8 = ((argb and 0xFF) + dither).coerceIn(0, 255)
 
-                val idx15 = (r5 shl 10) or (g5 shl 5) or b5
-                var palIdx = rgb555Lut[idx15]
+                val idx18 = ((r8 ushr 2) shl 12) or ((g8 ushr 2) shl 6) or (b8 ushr 2)
+                var palIdx = rgb666Lut[idx18]
                 if (palIdx == -1) {
-                    val r8 = (r5 shl 3) or (r5 shr 2)
-                    val g8 = (g5 shl 3) or (g5 shr 2)
-                    val b8 = (b5 shl 3) or (b5 shr 2)
                     palIdx = findNearestPaletteIndex(r8, g8, b8)
-                    rgb555Lut[idx15] = palIdx
+                    rgb666Lut[idx18] = palIdx
                 }
                 indexedPixels[offset] = palIdx.toByte()
                 offset++
             }
         }
-        // Fallback if totalPixels didn't match w*h
         while (offset < totalPixels) {
             indexedPixels[offset] = 0
             offset++
@@ -419,7 +533,7 @@ class AnimatedGifEncoder(rawOutputStream: OutputStream) {
             val dr = r - palR[i]
             val dg = g - palG[i]
             val db = b - palB[i]
-            // Perceptual human-eye RGB weights (2*dR^2 + 4*dG^2 + 3*dB^2)
+            // Perceptual redmean-inspired sRGB distance weights (2*dR^2 + 4*dG^2 + 3*dB^2)
             val dist = (dr * dr * 2) + (dg * dg * 4) + (db * db * 3)
             if (dist < bestDist) {
                 bestDist = dist

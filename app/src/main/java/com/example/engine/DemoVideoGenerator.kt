@@ -51,10 +51,27 @@ object DemoVideoGenerator {
                     setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
                     setInteger(MediaFormat.KEY_FRAME_RATE, fps)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                    setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_FULL)
+                    setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+                    setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
                 }
 
                 val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                try {
+                    encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                } catch (_: Exception) {
+                    encoder.reset()
+                    val fallbackFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                        setInteger(
+                            MediaFormat.KEY_COLOR_FORMAT,
+                            MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+                        )
+                        setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                        setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                        setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                    }
+                    encoder.configure(fallbackFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                }
                 val inputSurface = encoder.createInputSurface()
                 encoder.start()
 
