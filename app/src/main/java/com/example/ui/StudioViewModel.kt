@@ -3,6 +3,7 @@ package com.example.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -56,6 +57,11 @@ sealed interface EncodingProgressState {
     data class Error(val message: String) : EncodingProgressState
 }
 
+enum class SafFallbackMode {
+    SINGLE_VIDEO,
+    MULTI_VIDEO
+}
+
 data class GifEditorUiState(
     val videoMetadata: VideoSourceMetadata? = null,
     val isLoadingVideo: Boolean = false,
@@ -105,6 +111,12 @@ class StudioViewModel(
 
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    private val _safFallbackRequest = MutableStateFlow<SafFallbackMode?>(null)
+    val safFallbackRequest: StateFlow<SafFallbackMode?> = _safFallbackRequest.asStateFlow()
+
+    private val _preferSafDocumentPicker = MutableStateFlow(false)
+    val preferSafDocumentPicker: StateFlow<Boolean> = _preferSafDocumentPicker.asStateFlow()
 
     val liveRecordingState: StateFlow<LiveRecordingState> = ScreenRecordService.recordingState
 
@@ -161,6 +173,10 @@ class StudioViewModel(
         _toastMessage.value = null
     }
 
+    fun clearSafFallbackRequest() {
+        _safFallbackRequest.value = null
+    }
+
     fun toggleDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             repository.setDynamicColor(enabled)
@@ -214,6 +230,7 @@ class StudioViewModel(
         sourceType: String = "VIDEO_IMPORT",
         suggestedTitle: String = "GIF_${System.currentTimeMillis() % 10000}"
     ) {
+        frameProcessor.takeUriPermissionSafely(uri)
         previewPlaybackJob?.cancel()
         viewModelScope.launch {
             _editorState.update {
@@ -248,8 +265,8 @@ class StudioViewModel(
                     initialCrop,
                     _editorState.value.resolutionPreset
                 )
-                val firstFrame = frameProcessor.extractPreviewFrame(uri, 0L)
-                val thumbs = frameProcessor.extractTimelineThumbnails(uri, meta.durationMs, count = 8)
+                val firstFrame = frameProcessor.extractPreviewFrame(meta.uri, 0L)
+                val thumbs = frameProcessor.extractTimelineThumbnails(meta.uri, meta.durationMs, count = 8)
 
                 _editorState.update { state ->
                     val newState = state.copy(
@@ -271,7 +288,21 @@ class StudioViewModel(
                 _currentTab.value = StudioTab.EDITOR
             }.onFailure { err ->
                 _editorState.update { it.copy(isLoadingVideo = false) }
-                _toastMessage.value = "读取视频失败: ${err.localizedMessage ?: "格式不支持"}"
+                val uriStr = uri.toString()
+                val causeDiagnosis = frameProcessor.classifyAccessFailureCause(err, uri)
+                Log.e(
+                    VideoFrameProcessor.TAG,
+                    "[VM_LOAD_VIDEO_FAILED] sourceType=$sourceType | uri=$uri | " +
+                        "cause=$causeDiagnosis | error=${err.javaClass.name}: ${err.message}",
+                    err
+                )
+                if (uriStr.contains("/picker/") || uriStr.contains("photopicker")) {
+                    _preferSafDocumentPicker.value = true
+                    _toastMessage.value = "系统相册通道受限，已为您切换至系统文件选择器，请重新选择视频"
+                    _safFallbackRequest.value = SafFallbackMode.SINGLE_VIDEO
+                } else {
+                    _toastMessage.value = "读取视频失败: ${err.localizedMessage ?: "格式不支持"}"
+                }
             }
         }
     }
@@ -578,12 +609,27 @@ class StudioViewModel(
 
     fun enqueueVideosToBatchQueue(uris: List<Uri>) {
         if (uris.isEmpty()) return
+        uris.forEach { frameProcessor.takeUriPermissionSafely(it) }
         batchQueueManager.enqueueMultipleVideos(uris) { addedCount ->
             if (addedCount > 0) {
                 _toastMessage.value = "已将 $addedCount 个视频加入后台队列"
                 _currentTab.value = StudioTab.QUEUE
             } else {
-                _toastMessage.value = "未能读取所选视频文件"
+                val hasPickerUri = uris.any {
+                    val s = it.toString()
+                    s.contains("/picker/") || s.contains("photopicker")
+                }
+                Log.e(
+                    VideoFrameProcessor.TAG,
+                    "[VM_BATCH_ENQUEUE_FAILED] 0 of ${uris.size} videos could be inspected | hasPickerUri=$hasPickerUri | uris=$uris"
+                )
+                if (hasPickerUri) {
+                    _preferSafDocumentPicker.value = true
+                    _toastMessage.value = "系统相册通道受限，已为您切换至系统文件选择器，请重新选择视频"
+                    _safFallbackRequest.value = SafFallbackMode.MULTI_VIDEO
+                } else {
+                    _toastMessage.value = "未能读取所选视频文件"
+                }
             }
         }
     }

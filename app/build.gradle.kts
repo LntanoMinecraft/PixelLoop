@@ -16,9 +16,8 @@ android {
     applicationId = "com.aistudio.pixelloop.mrxkqv"
     minSdk = 24
     targetSdk = 36
-    // Locked at 9.0 per user request — do not modify unless explicitly requested by user
-    versionCode = 9
-    versionName = "9.0"
+    versionCode = 11
+    versionName = "11.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

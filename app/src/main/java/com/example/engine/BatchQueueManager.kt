@@ -3,6 +3,7 @@ package com.example.engine
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import com.example.data.GifCreationEntity
 import com.example.data.GifRepository
 import com.example.service.GifProcessingService
@@ -99,6 +100,7 @@ class BatchQueueManager(
         onEnqueued: (Int) -> Unit = {}
     ) {
         if (uris.isEmpty()) return
+        uris.forEach { frameProcessor.takeUriPermissionSafely(it) }
         queueScope.launch(Dispatchers.IO) {
             val currentConfig = _queueState.value.config
             val addedItems = mutableListOf<QueueTaskItem>()
@@ -111,7 +113,7 @@ class BatchQueueManager(
                     fallbackTitle = title
                 )
                 metaResult.onSuccess { meta ->
-                    val thumb = frameProcessor.extractPreviewFrame(uri, 0L, maxDimension = 320)
+                    val thumb = frameProcessor.extractPreviewFrame(meta.uri, 0L, maxDimension = 320)
                     val defaultEnd = min(meta.durationMs, 10_000L)
                     addedItems.add(
                         QueueTaskItem(
@@ -126,6 +128,13 @@ class BatchQueueManager(
                             playbackSpeed = currentConfig.defaultSpeed,
                             status = QueueTaskStatus.PENDING
                         )
+                    )
+                }.onFailure { err ->
+                    Log.e(
+                        VideoFrameProcessor.TAG,
+                        "[BATCH_ITEM_SKIPPED] item[$idx] uri=$uri failed inspection | " +
+                            "cause=${frameProcessor.classifyAccessFailureCause(err, uri)} | error=${err.javaClass.name}: ${err.message}",
+                        err
                     )
                 }
             }

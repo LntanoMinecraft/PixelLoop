@@ -9,6 +9,8 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,6 +47,7 @@ import com.example.engine.VideoFrameProcessor
 import com.example.service.LiveUpdateNotificationHelper
 import com.example.service.QuickRecordTileService
 import com.example.service.ScreenRecordService
+import com.example.ui.SafFallbackMode
 import com.example.ui.StudioTab
 import com.example.ui.StudioViewModel
 import com.example.ui.components.ExpressiveFloatingNavBar
@@ -120,6 +123,8 @@ fun PixelLoopAppRoot(
     val countdownValue by studioViewModel.countdownSeconds.collectAsStateWithLifecycle()
     val liveRecordingState by studioViewModel.liveRecordingState.collectAsStateWithLifecycle()
     val toastMessage by studioViewModel.toastMessage.collectAsStateWithLifecycle()
+    val safFallbackRequest by studioViewModel.safFallbackRequest.collectAsStateWithLifecycle()
+    val preferSafPicker by studioViewModel.preferSafDocumentPicker.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -134,25 +139,157 @@ fun PixelLoopAppRoot(
         studioViewModel.selectTab(StudioTab.HOME)
     }
 
-    // Single video picker for Editor
+    // Single video picker for Editor (Android Photo Picker)
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
+            logVideoPickerResultDiagnostics(
+                context = context,
+                pickerContract = "PickVisualMedia(Single)",
+                uris = listOf(uri)
+            )
             studioViewModel.loadVideoFromUri(
                 uri = uri,
                 sourceType = "VIDEO_IMPORT",
                 suggestedTitle = "GIF_${System.currentTimeMillis() % 10000}"
             )
+        } else {
+            Log.d(
+                VideoFrameProcessor.TAG,
+                "[PICKER_RESULT] PickVisualMedia(Single) returned null URI (user cancelled or provider returned empty result)"
+            )
         }
     }
 
-    // Multi-video picker for Batch Queue
+    // Zero-permission SAF fallback for Single Video when OEM PhotoPicker provider is broken
+    val safSingleVideoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            logVideoPickerResultDiagnostics(
+                context = context,
+                pickerContract = "SAF_OpenDocument(Single)",
+                uris = listOf(uri)
+            )
+            studioViewModel.loadVideoFromUri(
+                uri = uri,
+                sourceType = "VIDEO_IMPORT",
+                suggestedTitle = "GIF_${System.currentTimeMillis() % 10000}"
+            )
+        } else {
+            Log.d(
+                VideoFrameProcessor.TAG,
+                "[PICKER_RESULT] SAF_OpenDocument(Single) returned null URI (user cancelled)"
+            )
+        }
+    }
+
+    // Multi-video picker for Batch Queue (Android Photo Picker)
     val multiVideoQueuePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
+            logVideoPickerResultDiagnostics(
+                context = context,
+                pickerContract = "PickMultipleVisualMedia(Batch, count=${uris.size})",
+                uris = uris
+            )
             studioViewModel.enqueueVideosToBatchQueue(uris)
+        } else {
+            Log.d(
+                VideoFrameProcessor.TAG,
+                "[PICKER_RESULT] PickMultipleVisualMedia(Batch) returned empty URI list (user cancelled or provider returned empty result)"
+            )
+        }
+    }
+
+    // Zero-permission SAF fallback for Multi-Video when OEM PhotoPicker provider is broken
+    val safMultiVideoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            logVideoPickerResultDiagnostics(
+                context = context,
+                pickerContract = "SAF_OpenMultipleDocuments(Batch, count=${uris.size})",
+                uris = uris
+            )
+            studioViewModel.enqueueVideosToBatchQueue(uris)
+        } else {
+            Log.d(
+                VideoFrameProcessor.TAG,
+                "[PICKER_RESULT] SAF_OpenMultipleDocuments(Batch) returned empty URI list (user cancelled)"
+            )
+        }
+    }
+
+    val launchSingleVideoPicker: () -> Unit = {
+        if (preferSafPicker) {
+            Log.d(VideoFrameProcessor.TAG, "[PICKER_LAUNCH] Launching SAF_OpenDocument(Single) (preferSafPicker=true)")
+            runCatching { safSingleVideoLauncher.launch(arrayOf("video/*")) }
+                .onFailure { err ->
+                    Log.e(VideoFrameProcessor.TAG, "[PICKER_LAUNCH_ERROR] Failed launching SAF_OpenDocument(Single)", err)
+                }
+        } else {
+            Log.d(VideoFrameProcessor.TAG, "[PICKER_LAUNCH] Launching PickVisualMedia(Single, VideoOnly)")
+            runCatching {
+                videoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                )
+            }.onFailure { err ->
+                Log.w(
+                    VideoFrameProcessor.TAG,
+                    "[PICKER_LAUNCH_FALLBACK] PickVisualMedia(Single) launch failed (${err.javaClass.simpleName}: ${err.message}); falling back to SAF_OpenDocument",
+                    err
+                )
+                runCatching { safSingleVideoLauncher.launch(arrayOf("video/*")) }
+            }
+        }
+    }
+
+    val launchMultiVideoPicker: () -> Unit = {
+        if (preferSafPicker) {
+            Log.d(VideoFrameProcessor.TAG, "[PICKER_LAUNCH] Launching SAF_OpenMultipleDocuments(Batch) (preferSafPicker=true)")
+            runCatching { safMultiVideoLauncher.launch(arrayOf("video/*")) }
+                .onFailure { err ->
+                    Log.e(VideoFrameProcessor.TAG, "[PICKER_LAUNCH_ERROR] Failed launching SAF_OpenMultipleDocuments(Batch)", err)
+                }
+        } else {
+            Log.d(VideoFrameProcessor.TAG, "[PICKER_LAUNCH] Launching PickMultipleVisualMedia(Batch, VideoOnly)")
+            runCatching {
+                multiVideoQueuePickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                )
+            }.onFailure { err ->
+                Log.w(
+                    VideoFrameProcessor.TAG,
+                    "[PICKER_LAUNCH_FALLBACK] PickMultipleVisualMedia(Batch) launch failed (${err.javaClass.simpleName}: ${err.message}); falling back to SAF_OpenMultipleDocuments",
+                    err
+                )
+                runCatching { safMultiVideoLauncher.launch(arrayOf("video/*")) }
+            }
+        }
+    }
+
+    LaunchedEffect(safFallbackRequest) {
+        when (safFallbackRequest) {
+            SafFallbackMode.SINGLE_VIDEO -> {
+                Log.w(
+                    VideoFrameProcessor.TAG,
+                    "[PICKER_AUTO_FALLBACK] Triggering automatic fallback to SAF_OpenDocument(Single) due to PhotoPicker provider access denial"
+                )
+                studioViewModel.clearSafFallbackRequest()
+                runCatching { safSingleVideoLauncher.launch(arrayOf("video/*")) }
+            }
+            SafFallbackMode.MULTI_VIDEO -> {
+                Log.w(
+                    VideoFrameProcessor.TAG,
+                    "[PICKER_AUTO_FALLBACK] Triggering automatic fallback to SAF_OpenMultipleDocuments(Batch) due to PhotoPicker provider access denial"
+                )
+                studioViewModel.clearSafFallbackRequest()
+                runCatching { safMultiVideoLauncher.launch(arrayOf("video/*")) }
+            }
+            null -> Unit
         }
     }
 
@@ -281,16 +418,8 @@ fun PixelLoopAppRoot(
                                 onStartScreenRecord = requestScreenRecord,
                                 onStopLiveRecordAndEdit = stopActiveRecordingAndEdit,
                                 onAddTileToControlCenter = addTileToControlCenter,
-                                onPickLocalVideo = {
-                                    videoPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                                    )
-                                },
-                                onPickMultipleVideosForQueue = {
-                                    multiVideoQueuePickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                                    )
-                                },
+                                onPickLocalVideo = launchSingleVideoPicker,
+                                onPickMultipleVideosForQueue = launchMultiVideoPicker,
                                 onOpenQueue = { studioViewModel.selectTab(StudioTab.QUEUE) },
                                 onShareCreation = studioViewModel::shareGif,
                                 onOpenGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
@@ -300,11 +429,7 @@ fun PixelLoopAppRoot(
                         StudioTab.EDITOR -> {
                             EditorScreen(
                                 uiState = editorState,
-                                onPickVideo = {
-                                    videoPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                                    )
-                                },
+                                onPickVideo = launchSingleVideoPicker,
                                 onSelectAspectPreset = studioViewModel::selectAspectPreset,
                                 onUpdateCropRect = studioViewModel::updateCropRect,
                                 onUpdateTrimRange = studioViewModel::updateTrimRange,
@@ -330,11 +455,7 @@ fun PixelLoopAppRoot(
                         StudioTab.QUEUE -> {
                             QueueScreen(
                                 queueState = queueState,
-                                onAddMultipleVideos = {
-                                    multiVideoQueuePickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                                    )
-                                },
+                                onAddMultipleVideos = launchMultiVideoPicker,
                                 onTogglePauseResume = studioViewModel::toggleQueuePauseResume,
                                 onClearCompleted = studioViewModel::clearCompletedQueueTasks,
                                 onMoveTaskUp = studioViewModel::moveQueueTaskUp,
@@ -392,3 +513,71 @@ fun PixelLoopAppRoot(
         }
     }
 }
+
+/**
+ * Logs structured diagnostics immediately when a video picker activity result returns,
+ * capturing URI structure, OEM provider authority, caller read permission grant status,
+ * and ContentResolver MIME/provider reachability to aid diagnosing file access denials.
+ */
+private fun logVideoPickerResultDiagnostics(
+    context: Context,
+    pickerContract: String,
+    uris: List<Uri>
+) {
+    val pid = Process.myPid()
+    val uid = Process.myUid()
+    val deviceInfo = "${Build.MANUFACTURER}/${Build.BRAND}/${Build.MODEL} (SDK=${Build.VERSION.SDK_INT})"
+
+    Log.d(
+        VideoFrameProcessor.TAG,
+        "[PICKER_RESULT] contract=$pickerContract | count=${uris.size} | device=$deviceInfo | callerPid=$pid callerUid=$uid"
+    )
+
+    uris.forEachIndexed { index, uri ->
+        val readPermCheck = runCatching {
+            context.checkUriPermission(uri, pid, uid, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }.getOrDefault(PackageManager.PERMISSION_DENIED)
+        val permStatus = if (readPermCheck == PackageManager.PERMISSION_GRANTED) {
+            "GRANTED"
+        } else {
+            "DENIED($readPermCheck)"
+        }
+
+        val providerInfo = runCatching {
+            val auth = uri.authority
+            if (!auth.isNullOrBlank()) {
+                val pInfo = context.packageManager.resolveContentProvider(auth, 0)
+                if (pInfo != null) {
+                    "pkg=${pInfo.packageName},exported=${pInfo.exported},grantUriPerms=${pInfo.grantUriPermissions},readPerm=${pInfo.readPermission}"
+                } else {
+                    "UNRESOLVED_AUTHORITY($auth)"
+                }
+            } else {
+                "NO_AUTHORITY"
+            }
+        }.getOrElse { "ERR(${it.javaClass.simpleName}:${it.message})" }
+
+        val resolvedMime = runCatching {
+            context.contentResolver.getType(uri) ?: "null"
+        }.getOrElse { "ERR(${it.javaClass.simpleName}:${it.message})" }
+
+        val segments = uri.pathSegments
+        val delegatedCloudAuthority = if (segments.size >= 3 && (segments[0] == "picker" || segments[0] == "picker_get_content")) {
+            val cloudAuth = segments[2]
+            val cloudProviderPkg = runCatching {
+                context.packageManager.resolveContentProvider(cloudAuth, 0)?.packageName ?: "UNRESOLVED($cloudAuth)"
+            }.getOrDefault("ERR")
+            "$cloudAuth (providerPkg=$cloudProviderPkg)"
+        } else {
+            "none"
+        }
+
+        Log.d(
+            VideoFrameProcessor.TAG,
+            "[PICKER_URI_DIAG] item[$index] uri=$uri | scheme=${uri.scheme} | authority=${uri.authority} | " +
+                "segments=$segments | delegatedCloudProvider=$delegatedCloudAuthority | " +
+                "readGrant=$permStatus | mime=$resolvedMime | provider=[$providerInfo]"
+        )
+    }
+}
+
