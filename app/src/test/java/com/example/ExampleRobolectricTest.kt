@@ -64,4 +64,16 @@ class ExampleRobolectricTest {
         assertEquals("停止并转 GIF", context.getString(R.string.qs_tile_stop_gif_label))
         assertEquals("队列", context.getString(R.string.nav_queue))
     }
+
+    @Test
+    fun `verify 5-tab navigation, 7-color ThemePalette, and Settings About resources`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals(5, com.example.ui.StudioTab.entries.size)
+        assertEquals("设置", context.getString(R.string.nav_settings))
+        assertEquals(7, com.example.data.ThemePalette.entries.size)
+        assertEquals("github.com/LntanoMinecraft/PixelLoop", context.getString(R.string.about_github_subtitle))
+        assertEquals("酷安主页 · UID 34054336", context.getString(R.string.about_coolapk_subtitle))
+        assertTrue(BuildConfig.VERSION_CODE > 0)
+        assertTrue(BuildConfig.VERSION_NAME.isNotBlank())
+    }
 }

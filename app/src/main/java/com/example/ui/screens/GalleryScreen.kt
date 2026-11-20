@@ -1,19 +1,23 @@
 package com.example.ui.screens
 
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -57,14 +63,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.GifCreationEntity
 import com.example.data.ScreenRecordingEntity
 import com.example.ui.components.AnimatedGifPlayer
-import com.example.ui.components.ExpressiveMorphChip
 import com.example.ui.components.formatDurationMs
 import com.example.ui.components.formatFileSize
+import com.example.ui.theme.ExpressiveSprings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -86,11 +93,13 @@ fun GalleryScreen(
     onDeleteRecording: (ScreenRecordingEntity) -> Unit = {},
     onClearAllRecordings: () -> Unit = {},
     onGoToHome: () -> Unit,
+    bottomBarClearance: Dp = 112.dp,
     modifier: Modifier = Modifier
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(GalleryCategory.GIF_CREATIONS) }
-
     val totalRecordingsBytes = recordings.sumOf { it.fileSizeBytes }
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val effectiveBottomPadding = bottomBarClearance + navBarBottom
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -100,48 +109,34 @@ fun GalleryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 1080.dp)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp)
         ) {
-            // 1. Header Row: Title + Segmented Filter Chips (GIF 作品 / 录屏原片)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.gallery_header_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+            // 1. Spacious Title Row
+            Text(
+                text = stringResource(R.string.gallery_header_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ExpressiveMorphChip(
-                        label = "GIF 作品 (${creations.size})",
-                        selected = selectedCategory == GalleryCategory.GIF_CREATIONS,
-                        onClick = { selectedCategory = GalleryCategory.GIF_CREATIONS },
-                        testTag = "gallery_tab_gifs"
-                    )
+            Spacer(modifier = Modifier.height(14.dp))
 
-                    ExpressiveMorphChip(
-                        label = "录屏原片 (${recordings.size})",
-                        selected = selectedCategory == GalleryCategory.SCREEN_RECORDINGS,
-                        onClick = { selectedCategory = GalleryCategory.SCREEN_RECORDINGS },
-                        testTag = "gallery_tab_recordings"
-                    )
-                }
-            }
+            // 2. Standalone M3 Expressive Capsule Segmented Switcher (moved below title)
+            GallerySegmentedBar(
+                selectedCategory = selectedCategory,
+                gifCount = creations.size,
+                recordingCount = recordings.size,
+                onSelectCategory = { selectedCategory = it }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             when (selectedCategory) {
                 GalleryCategory.GIF_CREATIONS -> {
                     if (creations.isEmpty()) {
-                        EmptyGalleryStateCard(
+                        EmptyGalleryStateView(
                             title = stringResource(R.string.gallery_empty_title),
+                            subtitle = "导出的动态 GIF 会统一保存在这里，支持一键分享与存入相册",
                             actionText = if (recordings.isNotEmpty()) "查看录屏原片 (${recordings.size})" else "开始创作",
                             onActionClick = {
                                 if (recordings.isNotEmpty()) {
@@ -150,12 +145,13 @@ fun GalleryScreen(
                                     onGoToHome()
                                 }
                             },
+                            bottomClearance = effectiveBottomPadding,
                             testTag = "gallery_empty_go_home_button"
                         )
                     } else {
                         LazyVerticalGrid(
                             columns = GridCells.Adaptive(minSize = 260.dp),
-                            contentPadding = PaddingValues(bottom = 108.dp),
+                            contentPadding = PaddingValues(bottom = effectiveBottomPadding),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier
@@ -176,52 +172,55 @@ fun GalleryScreen(
 
                 GalleryCategory.SCREEN_RECORDINGS -> {
                     if (recordings.isEmpty()) {
-                        EmptyGalleryStateCard(
-                            title = "暂无保存的录屏视频",
+                        EmptyGalleryStateView(
+                            title = "暂无保存的录屏原片",
+                            subtitle = "使用屏幕录制功能后，原始 MP4 会自动收录在此便于二次裁剪",
                             actionText = "去录屏捕获",
                             onActionClick = onGoToHome,
+                            bottomClearance = effectiveBottomPadding,
                             testTag = "recordings_empty_go_home_button"
                         )
                     } else {
-                        // Storage usage & One-tap clean bar
+                        // Borderless tonal storage usage & one-tap clean bar
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 14.dp)
                                 .testTag("recordings_storage_banner"),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 18.dp, vertical = 14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "录屏原片占用: ${formatFileSize(totalRecordingsBytes)}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontFeatureSettings = "tnum"
+                                        ),
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "可随时重新载入剪辑，或删除原片释放应用空间",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = "可随时重新载入剪辑，或清理原片释放空间",
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
                                 FilledTonalButton(
                                     onClick = onClearAllRecordings,
                                     shape = CircleShape,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                     modifier = Modifier
-                                        .heightIn(min = 38.dp)
+                                        .heightIn(min = 40.dp)
                                         .testTag("clear_all_recordings_button")
                                 ) {
                                     Icon(
@@ -242,7 +241,7 @@ fun GalleryScreen(
 
                         LazyVerticalGrid(
                             columns = GridCells.Adaptive(minSize = 260.dp),
-                            contentPadding = PaddingValues(bottom = 108.dp),
+                            contentPadding = PaddingValues(bottom = effectiveBottomPadding),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier
@@ -266,46 +265,166 @@ fun GalleryScreen(
 }
 
 @Composable
-private fun EmptyGalleryStateCard(
+private fun GallerySegmentedBar(
+    selectedCategory: GalleryCategory,
+    gifCount: Int,
+    recordingCount: Int,
+    onSelectCategory: (GalleryCategory) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GallerySegmentItem(
+                label = "GIF 作品 ($gifCount)",
+                selected = selectedCategory == GalleryCategory.GIF_CREATIONS,
+                onClick = { onSelectCategory(GalleryCategory.GIF_CREATIONS) },
+                modifier = Modifier.weight(1f),
+                testTag = "gallery_tab_gifs"
+            )
+            GallerySegmentItem(
+                label = "录屏原片 ($recordingCount)",
+                selected = selectedCategory == GalleryCategory.SCREEN_RECORDINGS,
+                onClick = { onSelectCategory(GalleryCategory.SCREEN_RECORDINGS) },
+                modifier = Modifier.weight(1f),
+                testTag = "gallery_tab_recordings"
+            )
+        }
+    }
+}
+
+@Composable
+private fun GallerySegmentItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            Color.Transparent
+        },
+        animationSpec = ExpressiveSprings.navBarSpring(),
+        label = "gallerySegmentBg"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = ExpressiveSprings.navBarSpring(),
+        label = "gallerySegmentText"
+    )
+
+    Surface(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .height(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        shape = CircleShape,
+        color = bgColor
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFeatureSettings = "tnum"
+                ),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                color = textColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyGalleryStateView(
     title: String,
+    subtitle: String,
     actionText: String,
     onActionClick: () -> Unit,
+    bottomClearance: Dp,
     testTag: String
 ) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = bottomClearance),
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 460.dp)
+                .widthIn(max = 420.dp)
         ) {
             Column(
-                modifier = Modifier.padding(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 34.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesomeMotion,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesomeMotion,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                }
+
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Button(
                     onClick = onActionClick,
                     shape = CircleShape,
-                    modifier = Modifier.testTag(testTag)
+                    contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag(testTag)
                 ) {
-                    Text(actionText)
+                    Text(
+                        text = actionText,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }
@@ -334,9 +453,8 @@ private fun ScreenRecordingGalleryCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(26.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("recording_item_card_${recording.id}")
@@ -346,7 +464,7 @@ private fun ScreenRecordingGalleryCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(172.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest),
                 contentAlignment = Alignment.Center
             ) {
@@ -366,23 +484,23 @@ private fun ScreenRecordingGalleryCard(
                     )
                 }
 
-                // Top-start duration badge
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(10.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f)
                 ) {
                     Text(
                         text = "MP4 · ${formatDurationMs(recording.durationMs)}",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
 
-                // Top-end file size badge
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -392,7 +510,9 @@ private fun ScreenRecordingGalleryCard(
                 ) {
                     Text(
                         text = formatFileSize(recording.fileSizeBytes),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
@@ -413,7 +533,9 @@ private fun ScreenRecordingGalleryCard(
 
             Text(
                 text = "${recording.width}×${recording.height} px · 录屏原片",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFeatureSettings = "tnum"
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
@@ -492,9 +614,8 @@ private fun GalleryCreationCard(
     onDelete: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(26.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("gallery_item_card_${item.id}")
@@ -504,7 +625,7 @@ private fun GalleryCreationCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(172.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(18.dp))
             ) {
                 AnimatedGifPlayer(
                     gifFilePath = item.filePath,
@@ -522,7 +643,9 @@ private fun GalleryCreationCard(
                 ) {
                     Text(
                         text = formatFileSize(item.fileSizeBytes),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
@@ -543,7 +666,9 @@ private fun GalleryCreationCard(
 
             Text(
                 text = "${item.width}×${item.height} · ${item.fps} FPS · ${item.frameCount} 帧",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFeatureSettings = "tnum"
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 

@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.Scaffold
@@ -56,6 +59,7 @@ import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.GalleryScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.QueueScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.PixelLoopTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
@@ -89,7 +93,8 @@ class MainActivity : ComponentActivity() {
 
             PixelLoopTheme(
                 darkTheme = useDark,
-                dynamicColor = themePrefs.useDynamicColor
+                dynamicColor = themePrefs.useDynamicColor,
+                themePalette = themePrefs.themePalette
             ) {
                 PixelLoopAppRoot(
                     studioViewModel = studioViewModel,
@@ -392,8 +397,17 @@ fun PixelLoopAppRoot(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+        ),
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = 84.dp)
+            )
+        }
     ) { innerPadding ->
         BoxWithConstraints(
             modifier = Modifier
@@ -401,20 +415,19 @@ fun PixelLoopAppRoot(
                 .padding(innerPadding)
         ) {
             val useNavigationRail = maxWidth >= 720.dp
+            val bottomClearance = if (useNavigationRail) 28.dp else 116.dp
 
             val mainScreenContent: @Composable (Modifier) -> Unit = { contentModifier ->
                 Box(modifier = contentModifier) {
                     when (currentTab) {
                         StudioTab.HOME -> {
                             HomeScreen(
-                                themePreferences = themePrefs,
                                 isRecordingActive = liveRecordingState.isRecording,
                                 recordingElapsedSeconds = liveRecordingState.elapsedSeconds,
                                 countdownValue = countdownValue,
                                 activeQueueCount = queueState.activeBadgeCount,
                                 recentCreations = allCreations,
-                                onToggleDynamicColor = studioViewModel::toggleDynamicColor,
-                                onCycleThemeMode = studioViewModel::cycleThemeMode,
+                                recordingsCount = allRecordings.size,
                                 onStartScreenRecord = requestScreenRecord,
                                 onStopLiveRecordAndEdit = stopActiveRecordingAndEdit,
                                 onAddTileToControlCenter = addTileToControlCenter,
@@ -422,7 +435,8 @@ fun PixelLoopAppRoot(
                                 onPickMultipleVideosForQueue = launchMultiVideoPicker,
                                 onOpenQueue = { studioViewModel.selectTab(StudioTab.QUEUE) },
                                 onShareCreation = studioViewModel::shareGif,
-                                onOpenGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
+                                onOpenGallery = { studioViewModel.selectTab(StudioTab.GALLERY) },
+                                bottomBarClearance = bottomClearance
                             )
                         }
 
@@ -448,7 +462,8 @@ fun PixelLoopAppRoot(
                                 onDismissEncodingDialog = studioViewModel::dismissEncodingDialog,
                                 onShareCreation = studioViewModel::shareGif,
                                 onSaveCreationToGallery = studioViewModel::saveGifToSystemGallery,
-                                onNavigateToGallery = { studioViewModel.selectTab(StudioTab.GALLERY) }
+                                onNavigateToGallery = { studioViewModel.selectTab(StudioTab.GALLERY) },
+                                bottomBarClearance = bottomClearance
                             )
                         }
 
@@ -464,7 +479,8 @@ fun PixelLoopAppRoot(
                                 onUpdateBatchFps = studioViewModel::updateBatchQueueFps,
                                 onUpdateBatchResolution = studioViewModel::updateBatchQueueResolution,
                                 onUpdateBatchSpeed = studioViewModel::updateBatchQueueSpeed,
-                                onShareCreation = studioViewModel::shareGif
+                                onShareCreation = studioViewModel::shareGif,
+                                bottomBarClearance = bottomClearance
                             )
                         }
 
@@ -479,7 +495,19 @@ fun PixelLoopAppRoot(
                                 onEnqueueRecordingToQueue = studioViewModel::enqueueScreenRecordingToQueue,
                                 onDeleteRecording = studioViewModel::deleteScreenRecording,
                                 onClearAllRecordings = studioViewModel::clearAllScreenRecordings,
-                                onGoToHome = { studioViewModel.selectTab(StudioTab.HOME) }
+                                onGoToHome = { studioViewModel.selectTab(StudioTab.HOME) },
+                                bottomBarClearance = bottomClearance
+                            )
+                        }
+
+                        StudioTab.SETTINGS -> {
+                            SettingsScreen(
+                                themePreferences = themePrefs,
+                                onToggleDynamicColor = studioViewModel::toggleDynamicColor,
+                                onSelectThemeMode = studioViewModel::setThemeMode,
+                                onSelectThemePalette = studioViewModel::setThemePalette,
+                                onShowMessage = studioViewModel::showToast,
+                                bottomBarClearance = bottomClearance
                             )
                         }
                     }

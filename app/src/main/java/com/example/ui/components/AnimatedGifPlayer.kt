@@ -5,50 +5,31 @@ import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
 import android.os.Build
 import android.widget.ImageView
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesomeMotion
-import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.StopCircle
-import androidx.compose.material.icons.outlined.AutoAwesomeMotion
-import androidx.compose.material.icons.outlined.Crop
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.QueuePlayNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -56,7 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -66,20 +46,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.example.R
-import com.example.ui.StudioTab
-import com.example.ui.theme.ExpressiveSprings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -170,393 +143,7 @@ fun AnimatedGifPlayer(
 }
 
 /**
- * Material Design 3 Expressive (MD3E) Floating Pill Navigation Bar.
- * Features a detached floating capsule bar with bouncy expanding pill indicators.
- */
-@Composable
-fun ExpressiveFloatingNavBar(
-    currentTab: StudioTab,
-    queueCount: Int = 0,
-    galleryCount: Int,
-    onSelectTab: (StudioTab) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        val isCompactNav = maxWidth < 380.dp
-
-        Surface(
-            modifier = Modifier.widthIn(max = 520.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ExpressiveFloatingNavItem(
-                    selected = currentTab == StudioTab.HOME,
-                    activeIcon = Icons.Filled.Home,
-                    inactiveIcon = Icons.Outlined.Home,
-                    label = stringResource(R.string.nav_home),
-                    badgeCount = 0,
-                    isCompact = isCompactNav,
-                    onClick = { onSelectTab(StudioTab.HOME) },
-                    testTag = "nav_tab_home"
-                )
-
-                ExpressiveFloatingNavItem(
-                    selected = currentTab == StudioTab.EDITOR,
-                    activeIcon = Icons.Filled.Crop,
-                    inactiveIcon = Icons.Outlined.Crop,
-                    label = stringResource(R.string.nav_editor),
-                    badgeCount = 0,
-                    isCompact = isCompactNav,
-                    onClick = { onSelectTab(StudioTab.EDITOR) },
-                    testTag = "nav_tab_editor"
-                )
-
-                ExpressiveFloatingNavItem(
-                    selected = currentTab == StudioTab.QUEUE,
-                    activeIcon = Icons.Filled.QueuePlayNext,
-                    inactiveIcon = Icons.Outlined.QueuePlayNext,
-                    label = stringResource(R.string.nav_queue),
-                    badgeCount = queueCount,
-                    isCompact = isCompactNav,
-                    onClick = { onSelectTab(StudioTab.QUEUE) },
-                    testTag = "nav_tab_queue"
-                )
-
-                ExpressiveFloatingNavItem(
-                    selected = currentTab == StudioTab.GALLERY,
-                    activeIcon = Icons.Filled.AutoAwesomeMotion,
-                    inactiveIcon = Icons.Outlined.AutoAwesomeMotion,
-                    label = stringResource(R.string.nav_gallery),
-                    badgeCount = galleryCount,
-                    isCompact = isCompactNav,
-                    onClick = { onSelectTab(StudioTab.GALLERY) },
-                    testTag = "nav_tab_gallery"
-                )
-            }
-        }
-    }
-}
-
-/**
- * Canonical Material 3 Expressive Navigation Rail for Expanded / Tablet / Landscape screens.
- */
-@Composable
-fun ExpressiveNavigationRail(
-    currentTab: StudioTab,
-    queueCount: Int = 0,
-    galleryCount: Int,
-    onSelectTab: (StudioTab) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxHeight()
-            .padding(start = 12.dp, top = 16.dp, bottom = 16.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(horizontal = 10.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            ExpressiveRailItem(
-                selected = currentTab == StudioTab.HOME,
-                activeIcon = Icons.Filled.Home,
-                inactiveIcon = Icons.Outlined.Home,
-                label = stringResource(R.string.nav_home),
-                badgeCount = 0,
-                onClick = { onSelectTab(StudioTab.HOME) },
-                testTag = "nav_tab_home"
-            )
-
-            ExpressiveRailItem(
-                selected = currentTab == StudioTab.EDITOR,
-                activeIcon = Icons.Filled.Crop,
-                inactiveIcon = Icons.Outlined.Crop,
-                label = stringResource(R.string.nav_editor),
-                badgeCount = 0,
-                onClick = { onSelectTab(StudioTab.EDITOR) },
-                testTag = "nav_tab_editor"
-            )
-
-            ExpressiveRailItem(
-                selected = currentTab == StudioTab.QUEUE,
-                activeIcon = Icons.Filled.QueuePlayNext,
-                inactiveIcon = Icons.Outlined.QueuePlayNext,
-                label = stringResource(R.string.nav_queue),
-                badgeCount = queueCount,
-                onClick = { onSelectTab(StudioTab.QUEUE) },
-                testTag = "nav_tab_queue"
-            )
-
-            ExpressiveRailItem(
-                selected = currentTab == StudioTab.GALLERY,
-                activeIcon = Icons.Filled.AutoAwesomeMotion,
-                inactiveIcon = Icons.Outlined.AutoAwesomeMotion,
-                label = stringResource(R.string.nav_gallery),
-                badgeCount = galleryCount,
-                onClick = { onSelectTab(StudioTab.GALLERY) },
-                testTag = "nav_tab_gallery"
-            )
-        }
-    }
-}
-
-@Composable
-private fun ExpressiveRailItem(
-    selected: Boolean,
-    activeIcon: ImageVector,
-    inactiveIcon: ImageVector,
-    label: String,
-    badgeCount: Int,
-    onClick: () -> Unit,
-    testTag: String
-) {
-    val bgColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "railItemBg"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "railItemContent"
-    )
-
-    Surface(
-        modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .testTag(testTag),
-        shape = RoundedCornerShape(20.dp),
-        color = bgColor
-    ) {
-        Column(
-            modifier = Modifier
-                .width(72.dp)
-                .padding(vertical = 10.dp, horizontal = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                Icon(
-                    imageVector = if (selected) activeIcon else inactiveIcon,
-                    contentDescription = label,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                if (badgeCount > 0) {
-                    Surface(
-                        shape = CircleShape,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f)
-                        } else {
-                            MaterialTheme.colorScheme.primaryContainer
-                        }
-                    ) {
-                        Text(
-                            text = badgeCount.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            },
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = contentColor
-            )
-        }
-    }
-}
-
-@Composable
-private fun ExpressiveFloatingNavItem(
-    selected: Boolean,
-    activeIcon: ImageVector,
-    inactiveIcon: ImageVector,
-    label: String,
-    badgeCount: Int,
-    isCompact: Boolean = false,
-    onClick: () -> Unit,
-    testTag: String
-) {
-    val horizontalPad by animateDpAsState(
-        targetValue = when {
-            selected && isCompact -> 12.dp
-            selected -> 14.dp
-            isCompact -> 9.dp
-            else -> 12.dp
-        },
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "navItemPad"
-    )
-    val bgColor by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            Color.Transparent
-        },
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "navItemBg"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "navItemContent"
-    )
-
-    Surface(
-        modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .testTag(testTag),
-        shape = CircleShape,
-        color = bgColor
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = horizontalPad, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Icon(
-                imageVector = if (selected) activeIcon else inactiveIcon,
-                contentDescription = label,
-                tint = contentColor,
-                modifier = Modifier.size(19.dp)
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
-                color = contentColor
-            )
-            if (badgeCount > 0) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer
-                    }
-                ) {
-                    Text(
-                        text = badgeCount.toString(),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFeatureSettings = "tnum"
-                        ),
-                        maxLines = 1,
-                        softWrap = false,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        },
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Unified Material 3 Expressive Shape-Morphing Pill Chip.
- */
-@Composable
-fun ExpressiveMorphChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
-    onAccentColor: Color = MaterialTheme.colorScheme.onPrimary,
-    testTag: String? = null
-) {
-    val cornerRadius by animateDpAsState(
-        targetValue = if (selected) 22.dp else 14.dp,
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "chipCornerMorph"
-    )
-    val containerColor by animateColorAsState(
-        targetValue = if (selected) accentColor else MaterialTheme.colorScheme.surfaceContainerHigh,
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "chipBgColor"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) onAccentColor else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = ExpressiveSprings.snappyMorph(),
-        label = "chipTextColor"
-    )
-
-    val taggedModifier = if (testTag != null) modifier.testTag(testTag) else modifier
-
-    Surface(
-        modifier = taggedModifier
-            .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(cornerRadius))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(cornerRadius),
-        color = containerColor
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                softWrap = false,
-                color = contentColor
-            )
-        }
-    }
-}
-
-/**
- * Clean, Tonal Android 16 (API 36) Live Updates Status Card.
+ * Clean, Tonal Android 16 (API 36) Live Updates Status Card (borderless tonal container).
  */
 @Composable
 fun Android16LiveUpdateCard(
@@ -590,16 +177,12 @@ fun Android16LiveUpdateCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("android16_live_update_card"),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isRecording) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-            } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            }
-        )
+        shape = RoundedCornerShape(26.dp),
+        color = if (isRecording) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        }
     ) {
         Column(
             modifier = Modifier
@@ -617,9 +200,9 @@ fun Android16LiveUpdateCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -678,7 +261,9 @@ fun Android16LiveUpdateCard(
                         )
                         Text(
                             text = statusChipText,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = if (isRecording) {
                                 MaterialTheme.colorScheme.onPrimary
                             } else {

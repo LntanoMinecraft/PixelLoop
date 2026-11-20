@@ -4,9 +4,12 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Pure Alpha Silhouette with Even-Odd Cutout for Android 13-16 Native Themed Icons -->
+    <!--
+        Clean negative-space single-color silhouette for Android 13-16 Themed Icons.
+        Matches the exact 45dp x 45dp rounded squircle + centered rounded play triangle cutout.
+    -->
     <path
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
-        android:pathData="M42,30 L66,30 C72.63,30 78,35.37 78,42 L78,66 C78,72.63 72.63,78 66,78 L42,78 C35.37,78 30,72.63 30,66 L30,42 C30,35.37 35.37,30 42,30 Z M43,36 C39.13,36 36,39.13 36,43 L36,65 C36,68.87 39.13,72 43,72 L65,72 C68.87,72 72,68.87 72,65 L72,43 C72,39.13 68.87,36 65,36 Z M46,43.5 C46,42.2 47.4,41.4 48.5,42.1 L63.5,51.6 C64.5,52.3 64.5,53.7 63.5,54.4 L48.5,63.9 C47.4,64.6 46,63.8 46,62.5 Z" />
+        android:pathData="M46.5,31.5 L61.5,31.5 C69.78,31.5 76.5,38.22 76.5,46.5 L76.5,61.5 C76.5,69.78 69.78,76.5 61.5,76.5 L46.5,76.5 C38.22,76.5 31.5,69.78 31.5,61.5 L31.5,46.5 C31.5,38.22 38.22,31.5 46.5,31.5 Z M49.2,46.4 C49.2,44.85 50.88,43.88 52.22,44.66 L63.05,51.02 C64.38,51.80 64.38,53.72 63.05,54.50 L52.22,60.86 C50.88,61.64 49.2,60.67 49.2,59.12 Z" />
 </vector>

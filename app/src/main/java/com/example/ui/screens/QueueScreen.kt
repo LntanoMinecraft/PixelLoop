@@ -3,27 +3,28 @@ package com.example.ui.screens
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +62,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.GifCreationEntity
 import com.example.engine.BatchQueueConfig
@@ -70,7 +72,6 @@ import com.example.engine.QueueTaskStatus
 import com.example.engine.ResolutionPreset
 import com.example.ui.components.AnimatedGifPlayer
 import com.example.ui.components.ExpressiveMorphChip
-import com.example.ui.components.formatDurationMs
 import com.example.ui.components.formatFileSize
 import kotlin.math.abs
 import kotlin.math.max
@@ -88,8 +89,11 @@ fun QueueScreen(
     onUpdateBatchResolution: (ResolutionPreset) -> Unit,
     onUpdateBatchSpeed: (Float) -> Unit,
     onShareCreation: (GifCreationEntity) -> Unit,
+    bottomBarClearance: Dp = 112.dp,
     modifier: Modifier = Modifier
 ) {
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
@@ -99,10 +103,15 @@ fun QueueScreen(
                 .fillMaxSize()
                 .widthIn(max = 860.dp)
                 .testTag("queue_screen_list"),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 112.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 16.dp,
+                bottom = bottomBarClearance + navBarBottom
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Header Bar: Title + Live Status Badge + Add Videos Button
+            // 1. Header Bar: Title + Live Status Badge + Add Videos Button (aligned cleanly)
             item {
                 QueueHeaderSection(
                     queueState = queueState,
@@ -112,7 +121,7 @@ fun QueueScreen(
                 )
             }
 
-            // 2. Batch Preset Parameters Card
+            // 2. Batch Preset Parameters Card (Adaptive FlowRow prevents any right-edge clipping)
             item {
                 BatchPresetConfigCard(
                     config = queueState.config,
@@ -156,11 +165,13 @@ private fun QueueHeaderSection(
     onTogglePauseResume: () -> Unit,
     onClearCompleted: () -> Unit
 ) {
-    val compactBtnPad = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+    val compactBtnPad = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -172,7 +183,6 @@ private fun QueueHeaderSection(
                 Text(
                     text = "任务队列",
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onBackground
@@ -195,14 +205,16 @@ private fun QueueHeaderSection(
                 ) {
                     Text(
                         text = statusText,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         maxLines = 1,
                         color = if (queueState.isProcessing) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                     )
                 }
             }
@@ -214,7 +226,7 @@ private fun QueueHeaderSection(
                 shape = CircleShape,
                 contentPadding = compactBtnPad,
                 modifier = Modifier
-                    .heightIn(min = 42.dp)
+                    .heightIn(min = 44.dp)
                     .testTag("queue_add_videos_button")
             ) {
                 Icon(
@@ -242,9 +254,9 @@ private fun QueueHeaderSection(
                     FilledTonalButton(
                         onClick = onTogglePauseResume,
                         shape = CircleShape,
-                        contentPadding = compactBtnPad,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         modifier = Modifier
-                            .heightIn(min = 40.dp)
+                            .heightIn(min = 42.dp)
                             .testTag("queue_pause_resume_button")
                     ) {
                         Icon(
@@ -266,9 +278,9 @@ private fun QueueHeaderSection(
                     FilledTonalButton(
                         onClick = onClearCompleted,
                         shape = CircleShape,
-                        contentPadding = compactBtnPad,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         modifier = Modifier
-                            .heightIn(min = 40.dp)
+                            .heightIn(min = 42.dp)
                             .testTag("queue_clear_completed_button")
                     ) {
                         Icon(
@@ -279,7 +291,9 @@ private fun QueueHeaderSection(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "清理已完成 (${queueState.completedCount})",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -290,6 +304,7 @@ private fun QueueHeaderSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BatchPresetConfigCard(
     config: BatchQueueConfig,
@@ -301,16 +316,15 @@ private fun BatchPresetConfigCard(
     val batchSpeedOptions = listOf(0.5f, 1.0f, 1.5f, 2.0f)
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -334,47 +348,94 @@ private fun BatchPresetConfigCard(
                     )
                 }
 
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = "${config.defaultFps} FPS · ${config.defaultSpeed}x",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // FPS Group
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "${config.defaultResolution.label} · ${config.defaultFps} FPS · ${config.defaultSpeed}x",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "帧率",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-            }
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(batchFpsOptions) { fps ->
-                    ExpressiveMorphChip(
-                        label = "$fps FPS",
-                        selected = config.defaultFps == fps,
-                        onClick = { onUpdateFps(fps) },
-                        testTag = "batch_fps_chip_$fps"
-                    )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    batchFpsOptions.forEach { fps ->
+                        ExpressiveMorphChip(
+                            label = "$fps FPS",
+                            selected = config.defaultFps == fps,
+                            onClick = { onUpdateFps(fps) },
+                            testTag = "batch_fps_chip_$fps"
+                        )
+                    }
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f))
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(ResolutionPreset.entries) { preset ->
-                    ExpressiveMorphChip(
-                        label = preset.label,
-                        selected = config.defaultResolution == preset,
-                        onClick = { onUpdateResolution(preset) },
-                        testTag = "batch_res_chip_${preset.name}"
-                    )
+            // Resolution Group
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "分辨率",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ResolutionPreset.entries.forEach { preset ->
+                        ExpressiveMorphChip(
+                            label = preset.label,
+                            selected = config.defaultResolution == preset,
+                            onClick = { onUpdateResolution(preset) },
+                            testTag = "batch_res_chip_${preset.name}"
+                        )
+                    }
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f))
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(batchSpeedOptions) { speed ->
-                    ExpressiveMorphChip(
-                        label = "${speed}x",
-                        selected = abs(config.defaultSpeed - speed) < 0.01f,
-                        onClick = { onUpdateSpeed(speed) },
-                        testTag = "batch_speed_chip_$speed"
-                    )
+            // Speed Group
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "倍速",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    batchSpeedOptions.forEach { speed ->
+                        ExpressiveMorphChip(
+                            label = "${speed}x",
+                            selected = abs(config.defaultSpeed - speed) < 0.01f,
+                            onClick = { onUpdateSpeed(speed) },
+                            testTag = "batch_speed_chip_$speed"
+                        )
+                    }
                 }
             }
         }
@@ -401,37 +462,34 @@ private fun QueueTaskCard(
     )
     val percent = (rawProgress * 100).toInt().coerceIn(0, 100)
 
+    val containerColor = when (task.status) {
+        QueueTaskStatus.PROCESSING -> MaterialTheme.colorScheme.surfaceContainer
+        QueueTaskStatus.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f)
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("queue_task_card_${task.id}"),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            width = 1.dp,
-            color = when (task.status) {
-                QueueTaskStatus.PROCESSING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                QueueTaskStatus.FAILED -> MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
-                else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            }
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = containerColor
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Thumbnail or finished GIF preview
                 Box(
                     modifier = Modifier
                         .size(width = 72.dp, height = 72.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerLowest),
                     contentAlignment = Alignment.Center
                 ) {
@@ -453,13 +511,14 @@ private fun QueueTaskCard(
                     } else {
                         Text(
                             text = "#$index",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
 
-                // Task info & status
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -492,7 +551,9 @@ private fun QueueTaskCard(
 
                     Text(
                         text = metaSummary,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
@@ -507,7 +568,6 @@ private fun QueueTaskCard(
                     }
                 }
 
-                // Action controls
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -516,7 +576,7 @@ private fun QueueTaskCard(
                         IconButton(
                             onClick = onMoveUp,
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
                                 .testTag("queue_move_up_${task.id}")
                         ) {
@@ -533,7 +593,7 @@ private fun QueueTaskCard(
                         IconButton(
                             onClick = onRetry,
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
                                 .testTag("queue_retry_${task.id}")
                         ) {
@@ -551,7 +611,7 @@ private fun QueueTaskCard(
                         IconButton(
                             onClick = { onShareCreation(finishedCreation) },
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
                                 .testTag("queue_share_${task.id}")
                         ) {
@@ -567,7 +627,7 @@ private fun QueueTaskCard(
                     IconButton(
                         onClick = onRemove,
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
                             .testTag("queue_remove_${task.id}")
                     ) {
@@ -681,22 +741,21 @@ private fun EmptyQueueStateCard(
     onAddMultipleVideos: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(28.dp),
+                .padding(horizontal = 28.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(60.dp)
+                modifier = Modifier.size(62.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -714,11 +773,19 @@ private fun EmptyQueueStateCard(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
+            Text(
+                text = "一次选择多段视频，按上方预设参数自动顺序转码",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
             Button(
                 onClick = onAddMultipleVideos,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(50.dp)
                     .testTag("empty_queue_add_videos_button"),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(

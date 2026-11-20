@@ -6,10 +6,21 @@
     <string name="nav_editor">剪辑</string>
     <string name="nav_queue">队列</string>
     <string name="nav_gallery">作品库</string>
+    <string name="nav_settings">设置</string>
 
-    <!-- Theme & Expressive Controls -->
+    <!-- Theme & Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_appearance">外观与偏好</string>
+    <string name="settings_section_about">关于 PixelLoop</string>
     <string name="toggle_dynamic_color">动态取色</string>
+    <string name="toggle_dynamic_color_desc">跟随系统壁纸生成界面配色（Material You）</string>
     <string name="toggle_dark_mode">深浅色模式</string>
+    <string name="settings_theme_palette">应用主题色盘</string>
+    <string name="about_tagline">本地视频与录屏转 GIF 工具</string>
+    <string name="about_github_title">项目主页（GitHub）</string>
+    <string name="about_github_subtitle">github.com/LntanoMinecraft/PixelLoop</string>
+    <string name="about_coolapk_title">开发者酷安</string>
+    <string name="about_coolapk_subtitle">酷安主页 · UID 34054336</string>
 
     <!-- Home Screen -->
     <string name="card_record_title">屏幕录制转 GIF</string>

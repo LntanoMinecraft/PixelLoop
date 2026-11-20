@@ -4,11 +4,9 @@ import android.graphics.Bitmap
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -18,12 +16,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,7 +42,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.MovieCreation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -86,6 +86,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.R
@@ -129,11 +130,16 @@ fun EditorScreen(
     onShareCreation: (GifCreationEntity) -> Unit,
     onSaveCreationToGallery: (GifCreationEntity) -> Unit,
     onNavigateToGallery: () -> Unit,
+    bottomBarClearance: Dp = 116.dp,
     modifier: Modifier = Modifier
 ) {
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val effectiveBottomPadding = bottomBarClearance + navBarBottom
+
     if (uiState.videoMetadata == null && !uiState.isLoadingVideo) {
         EmptyEditorView(
             onPickVideo = onPickVideo,
+            bottomClearance = effectiveBottomPadding,
             modifier = modifier
         )
         return
@@ -159,12 +165,11 @@ fun EditorScreen(
         val isTwoPane = maxWidth >= 700.dp
 
         if (isTwoPane) {
-            // Canonical 2-Pane Adaptive Layout for Medium/Expanded screens (Foldables & Tablets)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 1160.dp)
-                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp)
                     .testTag("editor_scroll_list"),
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
@@ -172,7 +177,8 @@ fun EditorScreen(
                     modifier = Modifier
                         .weight(1.05f)
                         .fillMaxHeight()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = effectiveBottomPadding),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     InteractiveCropCanvasCard(
@@ -203,7 +209,8 @@ fun EditorScreen(
                     modifier = Modifier
                         .weight(0.95f)
                         .fillMaxHeight()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = effectiveBottomPadding),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     ParameterConsoleCard(
@@ -233,8 +240,13 @@ fun EditorScreen(
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
                     .testTag("editor_scroll_list"),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 116.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 14.dp,
+                    bottom = effectiveBottomPadding
+                ),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 item {
                     InteractiveCropCanvasCard(
@@ -312,7 +324,7 @@ fun EditorScreen(
             is EncodingProgressState.Error -> {
                 Dialog(onDismissRequest = onDismissEncodingDialog) {
                     Surface(
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(28.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh
                     ) {
                         Column(
@@ -330,7 +342,7 @@ fun EditorScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Button(onClick = onDismissEncodingDialog) {
+                            Button(onClick = onDismissEncodingDialog, shape = CircleShape) {
                                 Text("我知道了")
                             }
                         }
@@ -353,19 +365,18 @@ private fun ExportActionCard(
     onAddToQueue: () -> Unit,
     onExportGif: () -> Unit
 ) {
-    val compactBtnPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+    val compactBtnPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -382,21 +393,27 @@ private fun ExportActionCard(
                     ) {
                         Text(
                             text = "预计 ${formatFileSize(estimatedSizeBytes)}",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                     Text(
                         text = "共 $estimatedFrameCount 帧",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 Text(
-                    text = "$outputWidth × $outputHeight px · $targetFps FPS · ${playbackSpeed}x",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "$outputWidth × $outputHeight · $targetFps FPS · ${playbackSpeed}x",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -415,7 +432,7 @@ private fun ExportActionCard(
                             onClick = onAddToQueue,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 50.dp)
                                 .testTag("add_to_queue_button"),
                             shape = CircleShape,
                             contentPadding = compactBtnPadding
@@ -423,7 +440,7 @@ private fun ExportActionCard(
                             Icon(
                                 imageVector = Icons.Filled.AddToQueue,
                                 contentDescription = null,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -439,7 +456,7 @@ private fun ExportActionCard(
                             onClick = onExportGif,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 50.dp)
                                 .testTag("export_gif_button"),
                             shape = CircleShape,
                             contentPadding = compactBtnPadding,
@@ -451,7 +468,7 @@ private fun ExportActionCard(
                             Icon(
                                 imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -472,7 +489,7 @@ private fun ExportActionCard(
                             onClick = onAddToQueue,
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 50.dp)
                                 .testTag("add_to_queue_button"),
                             shape = CircleShape,
                             contentPadding = compactBtnPadding
@@ -480,7 +497,7 @@ private fun ExportActionCard(
                             Icon(
                                 imageVector = Icons.Filled.AddToQueue,
                                 contentDescription = null,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -496,7 +513,7 @@ private fun ExportActionCard(
                             onClick = onExportGif,
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 50.dp)
                                 .testTag("export_gif_button"),
                             shape = CircleShape,
                             contentPadding = compactBtnPadding,
@@ -508,7 +525,7 @@ private fun ExportActionCard(
                             Icon(
                                 imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -529,36 +546,40 @@ private fun ExportActionCard(
 @Composable
 private fun EmptyEditorView(
     onPickVideo: () -> Unit,
+    bottomClearance: Dp,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = bottomClearance),
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 420.dp)
         ) {
             Column(
-                modifier = Modifier.padding(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 34.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(60.dp)
+                    modifier = Modifier.size(64.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.Crop,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(30.dp)
                         )
                     }
                 }
@@ -569,11 +590,20 @@ private fun EmptyEditorView(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
+                Text(
+                    text = "选择本地视频后可自由裁剪画面比例、截取片段并调节帧率",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Button(
                     onClick = onPickVideo,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(50.dp)
                         .testTag("editor_pick_video_button"),
                     shape = CircleShape
                 ) {
@@ -613,20 +643,21 @@ private fun InteractiveCropCanvasCard(
     val handleCenterColor = MaterialTheme.colorScheme.onPrimary
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
+                .padding(vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Header Row: Title + Output Resolution Badge + Reset Button
+            // Header Row
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -638,12 +669,13 @@ private fun InteractiveCropCanvasCard(
                         imageVector = Icons.Filled.Crop,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = "画面裁剪与预览",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -657,7 +689,9 @@ private fun InteractiveCropCanvasCard(
                     ) {
                         Text(
                             text = "${outputWidth}×${outputHeight} px",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
@@ -666,7 +700,7 @@ private fun InteractiveCropCanvasCard(
                     IconButton(
                         onClick = { onSelectPreset(CropAspectPreset.FREE) },
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
                             .testTag("reset_crop_button")
                     ) {
@@ -680,13 +714,13 @@ private fun InteractiveCropCanvasCard(
                 }
             }
 
-            // Adaptive Aspect-Ratio Stage: automatically matches the video's native aspect ratio
-            // so portrait (9:16 / 9:20) and landscape (16:9) videos never stretch or distort!
+            // Adaptive Aspect-Ratio Stage
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
                     .heightIn(min = 200.dp, max = 380.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                     .padding(8.dp)
                     .testTag("interactive_crop_canvas"),
@@ -821,7 +855,9 @@ private fun InteractiveCropCanvasCard(
 
             // Dedicated Playback Control & Timecode Bar
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -834,7 +870,7 @@ private fun InteractiveCropCanvasCard(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -854,13 +890,15 @@ private fun InteractiveCropCanvasCard(
                                 fontFeatureSettings = "tnum"
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.widthIn(min = 52.dp)
+                            modifier = Modifier.widthIn(min = 54.dp)
                         )
                     }
                 }
             }
 
+            // Edge-to-edge scrolling aspect ratio chips
             LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -893,16 +931,15 @@ private fun FilmstripTimelineCard(
     val activeFrameColor = MaterialTheme.colorScheme.primary
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -911,8 +948,9 @@ private fun FilmstripTimelineCard(
             ) {
                 Text(
                     text = stringResource(R.string.section_timeline_trim),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Surface(
@@ -938,8 +976,8 @@ private fun FilmstripTimelineCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             ) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -1016,18 +1054,18 @@ private fun ParameterConsoleCard(
     val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Row(
+                modifier = Modifier.padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -1035,29 +1073,35 @@ private fun ParameterConsoleCard(
                     imageVector = Icons.Filled.Tune,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
                 Text(
                     text = stringResource(R.string.section_parameters),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
+            // FPS Controls
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = stringResource(R.string.label_fps),
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "$targetFps FPS",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -1068,10 +1112,15 @@ private fun ParameterConsoleCard(
                     valueRange = 5f..60f,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
                         .testTag("fps_slider")
                 )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     items(fpsOptions) { fps ->
                         ExpressiveMorphChip(
                             label = "$fps FPS",
@@ -1083,16 +1132,25 @@ private fun ParameterConsoleCard(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
+            )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Resolution Controls
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = stringResource(R.string.label_resolution),
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     items(ResolutionPreset.entries) { preset ->
                         ExpressiveMorphChip(
                             label = preset.label,
@@ -1104,16 +1162,25 @@ private fun ParameterConsoleCard(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
+            )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Playback Speed Controls
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = stringResource(R.string.label_speed),
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     items(speedOptions) { speed ->
                         ExpressiveMorphChip(
                             label = "${speed}x",
@@ -1143,7 +1210,7 @@ private fun EncodingProgressDialog(
 
     Dialog(onDismissRequest = {}) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
@@ -1167,7 +1234,7 @@ private fun EncodingProgressDialog(
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontFeatureSettings = "tnum"
                         ),
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -1213,7 +1280,7 @@ private fun ExportSuccessDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1246,11 +1313,7 @@ private fun ExportSuccessDialog(
                         .fillMaxWidth()
                         .height(200.dp)
                         .clip(RoundedCornerShape(18.dp))
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(18.dp)
-                        )
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                 ) {
                     AnimatedGifPlayer(
                         gifFilePath = creation.filePath,
@@ -1270,7 +1333,9 @@ private fun ExportSuccessDialog(
                     ) {
                         Text(
                             text = formatFileSize(creation.fileSizeBytes),
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
@@ -1281,7 +1346,9 @@ private fun ExportSuccessDialog(
                     ) {
                         Text(
                             text = "${creation.width}×${creation.height} · ${creation.fps} FPS",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )

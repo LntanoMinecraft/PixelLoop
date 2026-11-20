@@ -33,9 +33,20 @@ enum class ThemeMode(val label: String) {
     DARK("深色")
 }
 
+enum class ThemePalette(val label: String, val seedColorHex: Long) {
+    COBALT("谷歌蓝", 0xFF4285F4),
+    TEAL("晴空青", 0xFF00897B),
+    VIOLET("暮光紫", 0xFF7C4DFF),
+    CORAL("珊瑚红", 0xFFE55353),
+    AMBER("琥珀金", 0xFFD97706),
+    EMERALD("森林绿", 0xFF2E7D5B),
+    ROSE("樱花粉", 0xFFC94A7C)
+}
+
 data class ThemePreferences(
     val useDynamicColor: Boolean = true,
-    val themeMode: ThemeMode = ThemeMode.SYSTEM
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val themePalette: ThemePalette = ThemePalette.COBALT
 )
 
 class GifRepository(
@@ -44,6 +55,7 @@ class GifRepository(
 ) {
     private val dynamicColorKey = booleanPreferencesKey("use_dynamic_color")
     private val themeModeKey = stringPreferencesKey("theme_mode_v2")
+    private val themePaletteKey = stringPreferencesKey("theme_palette_v1")
 
     val allCreations: Flow<List<GifCreationEntity>> = gifDao.observeAllCreations()
     val allRecordings: Flow<List<ScreenRecordingEntity>> = gifDao.observeAllRecordings()
@@ -52,9 +64,12 @@ class GifRepository(
     val themePreferences: Flow<ThemePreferences> = context.dataStore.data.map { prefs ->
         val modeStr = prefs[themeModeKey] ?: ThemeMode.SYSTEM.name
         val mode = runCatching { ThemeMode.valueOf(modeStr) }.getOrDefault(ThemeMode.SYSTEM)
+        val paletteStr = prefs[themePaletteKey] ?: ThemePalette.COBALT.name
+        val palette = runCatching { ThemePalette.valueOf(paletteStr) }.getOrDefault(ThemePalette.COBALT)
         ThemePreferences(
             useDynamicColor = prefs[dynamicColorKey] ?: true,
-            themeMode = mode
+            themeMode = mode,
+            themePalette = palette
         )
     }
 
@@ -64,6 +79,13 @@ class GifRepository(
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { it[themeModeKey] = mode.name }
+    }
+
+    suspend fun setThemePalette(palette: ThemePalette) {
+        context.dataStore.edit {
+            it[themePaletteKey] = palette.name
+            it[dynamicColorKey] = false
+        }
     }
 
     suspend fun saveCreation(entity: GifCreationEntity): Long {

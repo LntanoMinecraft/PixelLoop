@@ -7,79 +7,34 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
-private val ExpressiveDarkScheme = darkColorScheme(
-    primary = ExpressivePrimaryDark,
-    onPrimary = ExpressiveOnPrimaryDark,
-    primaryContainer = ExpressivePrimaryContainerDark,
-    onPrimaryContainer = ExpressiveOnPrimaryContainerDark,
-    secondary = ExpressiveSecondaryDark,
-    onSecondary = ExpressiveOnSecondaryDark,
-    secondaryContainer = ExpressiveSecondaryContainerDark,
-    onSecondaryContainer = ExpressiveOnSecondaryContainerDark,
-    tertiary = ExpressiveTertiaryDark,
-    onTertiary = ExpressiveOnTertiaryDark,
-    tertiaryContainer = ExpressiveTertiaryContainerDark,
-    onTertiaryContainer = ExpressiveOnTertiaryContainerDark,
-    background = ExpressiveBackgroundDark,
-    onBackground = ExpressiveOnBackgroundDark,
-    surface = ExpressiveSurfaceDark,
-    onSurface = ExpressiveOnSurfaceDark,
-    surfaceVariant = ExpressiveSurfaceVariantDark,
-    onSurfaceVariant = ExpressiveOnSurfaceVariantDark,
-    surfaceContainerLowest = SurfaceContainerLowestDark,
-    surfaceContainerLow = SurfaceContainerLowDark,
-    surfaceContainer = SurfaceContainerDark,
-    surfaceContainerHigh = SurfaceContainerHighDark,
-    surfaceContainerHighest = SurfaceContainerHighestDark
-)
-
-private val ExpressiveLightScheme = lightColorScheme(
-    primary = ExpressivePrimaryLight,
-    onPrimary = ExpressiveOnPrimaryLight,
-    primaryContainer = ExpressivePrimaryContainerLight,
-    onPrimaryContainer = ExpressiveOnPrimaryContainerLight,
-    secondary = ExpressiveSecondaryLight,
-    onSecondary = ExpressiveOnSecondaryLight,
-    secondaryContainer = ExpressiveSecondaryContainerLight,
-    onSecondaryContainer = ExpressiveOnSecondaryContainerLight,
-    tertiary = ExpressiveTertiaryLight,
-    onTertiary = ExpressiveOnTertiaryLight,
-    tertiaryContainer = ExpressiveTertiaryContainerLight,
-    onTertiaryContainer = ExpressiveOnTertiaryContainerLight,
-    background = ExpressiveBackgroundLight,
-    onBackground = ExpressiveOnBackgroundLight,
-    surface = ExpressiveSurfaceLight,
-    onSurface = ExpressiveOnSurfaceLight,
-    surfaceVariant = ExpressiveSurfaceVariantLight,
-    onSurfaceVariant = ExpressiveOnSurfaceVariantLight,
-    surfaceContainerLowest = SurfaceContainerLowestLight,
-    surfaceContainerLow = SurfaceContainerLowLight,
-    surfaceContainer = SurfaceContainerLight,
-    surfaceContainerHigh = SurfaceContainerHighLight,
-    surfaceContainerHighest = SurfaceContainerHighestLight
-)
+import com.example.data.ThemePalette
 
 val ExpressiveShapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
-    small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(22.dp),
+    small = RoundedCornerShape(16.dp),
+    medium = RoundedCornerShape(24.dp),
     large = RoundedCornerShape(28.dp),
     extraLarge = RoundedCornerShape(36.dp)
 )
 
 /**
- * Material 3 Expressive Physics Springs — fast, responsive, zero-blur GPU-friendly motion.
+ * Material 3 Expressive Physics Springs — playful, responsive spatial springs.
  */
 object ExpressiveSprings {
+    /**
+     * Exact floating pill navigation bar spring physics specified for PixelLoop.
+     */
+    fun <T> navBarSpring() = spring<T>(
+        dampingRatio = 0.62f,
+        stiffness = 380f
+    )
+
     fun <T> bouncySpatial() = spring<T>(
         dampingRatio = Spring.DampingRatioLowBouncy,
         stiffness = Spring.StiffnessMediumLow
@@ -100,6 +55,7 @@ object ExpressiveSprings {
 fun PixelLoopTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    themePalette: ThemePalette = ThemePalette.COBALT,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -107,8 +63,7 @@ fun PixelLoopTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> ExpressiveDarkScheme
-        else -> ExpressiveLightScheme
+        else -> colorSchemeForPalette(palette = themePalette, darkTheme = darkTheme)
     }
 
     MaterialTheme(

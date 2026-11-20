@@ -11,6 +11,7 @@ import com.example.data.GifCreationEntity
 import com.example.data.GifRepository
 import com.example.data.ScreenRecordingEntity
 import com.example.data.ThemeMode
+import com.example.data.ThemePalette
 import com.example.data.ThemePreferences
 import com.example.engine.BatchQueueManager
 import com.example.engine.BatchQueueUiState
@@ -47,7 +48,8 @@ enum class StudioTab {
     HOME,
     EDITOR,
     QUEUE,
-    GALLERY
+    GALLERY,
+    SETTINGS
 }
 
 sealed interface EncodingProgressState {
@@ -183,15 +185,25 @@ class StudioViewModel(
         }
     }
 
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            repository.setThemeMode(mode)
+        }
+    }
+
+    fun setThemePalette(palette: ThemePalette) {
+        viewModelScope.launch {
+            repository.setThemePalette(palette)
+        }
+    }
+
     fun cycleThemeMode() {
         val next = when (themePreferences.value.themeMode) {
             ThemeMode.SYSTEM -> ThemeMode.LIGHT
             ThemeMode.LIGHT -> ThemeMode.DARK
             ThemeMode.DARK -> ThemeMode.SYSTEM
         }
-        viewModelScope.launch {
-            repository.setThemeMode(next)
-        }
+        setThemeMode(next)
     }
 
     fun startRecordCountdown(onCountdownFinished: () -> Unit) {

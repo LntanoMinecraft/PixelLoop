@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,10 +15,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,12 +34,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AddToQueue
-import androidx.compose.material.icons.filled.BrightnessAuto
-import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.AutoAwesomeMotion
 import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Share
@@ -64,25 +63,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.GifCreationEntity
-import com.example.data.ThemeMode
-import com.example.data.ThemePreferences
 import com.example.ui.components.AnimatedGifPlayer
 import com.example.ui.components.formatFileSize
 import com.example.ui.theme.ExpressiveSprings
 
 @Composable
 fun HomeScreen(
-    themePreferences: ThemePreferences,
     isRecordingActive: Boolean,
     recordingElapsedSeconds: Int,
     countdownValue: Int?,
     activeQueueCount: Int,
     recentCreations: List<GifCreationEntity>,
-    onToggleDynamicColor: (Boolean) -> Unit,
-    onCycleThemeMode: () -> Unit,
+    recordingsCount: Int,
     onStartScreenRecord: () -> Unit,
     onStopLiveRecordAndEdit: () -> Unit,
     onAddTileToControlCenter: () -> Unit,
@@ -91,8 +87,11 @@ fun HomeScreen(
     onOpenQueue: () -> Unit,
     onShareCreation: (GifCreationEntity) -> Unit,
     onOpenGallery: () -> Unit,
+    bottomBarClearance: Dp = 112.dp,
     modifier: Modifier = Modifier
 ) {
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
@@ -102,15 +101,23 @@ fun HomeScreen(
                 .fillMaxSize()
                 .widthIn(max = 960.dp)
                 .testTag("home_screen_list"),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 108.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 16.dp,
+                bottom = bottomBarClearance + navBarBottom
+            ),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 1. Minimalist Top Bar: App Title + Dynamic Color & Auto Dark/Light Controls
+            // 1. Clean Brand Top Header (PixelLoop only; theme controls moved to Settings)
             item {
-                ExpressiveTopHeader(
-                    themePreferences = themePreferences,
-                    onToggleDynamicColor = onToggleDynamicColor,
-                    onCycleThemeMode = onCycleThemeMode
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
 
@@ -146,12 +153,17 @@ fun HomeScreen(
                 )
             }
 
-            // 4. Recent Creations Carousel (Shown only when user has creations)
-            if (recentCreations.isNotEmpty()) {
-                item {
+            // 4. Recent Creations Carousel or Compact Quick Library Entry
+            item {
+                if (recentCreations.isNotEmpty()) {
                     RecentCreationsSection(
                         creations = recentCreations,
                         onShareCreation = onShareCreation,
+                        onOpenGallery = onOpenGallery
+                    )
+                } else {
+                    CompactLibraryShortcutCard(
+                        recordingsCount = recordingsCount,
                         onOpenGallery = onOpenGallery
                     )
                 }
@@ -178,16 +190,16 @@ private fun ActiveQueueBanner(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onOpenQueueClick)
             .testTag("active_queue_banner"),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -204,8 +216,10 @@ private fun ActiveQueueBanner(
                 )
                 Text(
                     text = "后台队列处理中 ($activeQueueCount 项)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -234,112 +248,6 @@ private fun ActiveQueueBanner(
 }
 
 @Composable
-private fun ExpressiveTopHeader(
-    themePreferences: ThemePreferences,
-    onToggleDynamicColor: (Boolean) -> Unit,
-    onCycleThemeMode: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Dynamic Color Toggle Chip
-            Surface(
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .clip(CircleShape)
-                    .clickable { onToggleDynamicColor(!themePreferences.useDynamicColor) }
-                    .testTag("toggle_dynamic_color_button"),
-                shape = CircleShape,
-                color = if (themePreferences.useDynamicColor) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Palette,
-                        contentDescription = stringResource(R.string.toggle_dynamic_color),
-                        tint = if (themePreferences.useDynamicColor) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "动态色",
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        color = if (themePreferences.useDynamicColor) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-            }
-
-            // 3-State Theme Mode Chip (跟随系统 / 浅色 / 深色)
-            Surface(
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .clip(CircleShape)
-                    .clickable(onClick = onCycleThemeMode)
-                    .testTag("toggle_dark_mode_button"),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = when (themePreferences.themeMode) {
-                            ThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
-                            ThemeMode.LIGHT -> Icons.Filled.LightMode
-                            ThemeMode.DARK -> Icons.Filled.DarkMode
-                        },
-                        contentDescription = stringResource(R.string.toggle_dark_mode),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = themePreferences.themeMode.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ActiveRecordingBanner(
     elapsedSeconds: Int,
     onStopAndEditClick: () -> Unit
@@ -352,13 +260,13 @@ private fun ActiveRecordingBanner(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("android16_live_update_card"),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -384,13 +292,13 @@ private fun ActiveRecordingBanner(
             Button(
                 onClick = onStopAndEditClick,
                 shape = CircleShape,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 42.dp)
                     .testTag("stop_live_record_button")
             ) {
                 Icon(
@@ -444,7 +352,7 @@ private fun DualCreationHeroSection(
         } else {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 VideoImportHeroCard(
                     onPickLocalVideo = onPickLocalVideo,
@@ -471,15 +379,14 @@ private fun VideoImportHeroCard(
 ) {
     Surface(
         modifier = modifier.testTag("import_mp4_card"),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -487,27 +394,39 @@ private fun VideoImportHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(52.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.VideoLibrary,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(25.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = stringResource(R.string.card_import_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.card_import_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "画面裁剪、时间截取与批量转码",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             AdaptiveDualActionButtons(
@@ -519,6 +438,8 @@ private fun VideoImportHeroCard(
                 onPrimaryClick = onPickLocalVideo,
                 secondaryLabel = stringResource(R.string.btn_batch_queue),
                 secondaryIcon = Icons.Filled.AddToQueue,
+                secondaryContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                secondaryContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 secondaryTestTag = "batch_queue_mp4_button",
                 onSecondaryClick = onPickMultipleVideosForQueue
             )
@@ -536,15 +457,14 @@ private fun ScreenRecordHeroCard(
 ) {
     Surface(
         modifier = modifier.testTag("screen_record_card"),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -552,27 +472,39 @@ private fun ScreenRecordHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(52.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.ScreenShare,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(25.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = stringResource(R.string.card_record_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.card_record_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "录制屏幕片段并自动载入剪辑",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             AdaptiveDualActionButtons(
@@ -581,21 +513,23 @@ private fun ScreenRecordHeroCard(
                 } else {
                     stringResource(R.string.btn_start_record)
                 },
-                primaryIcon = Icons.Filled.FiberManualRecord,
+                primaryIcon = if (isRecordingActive) Icons.Filled.StopCircle else Icons.Filled.FiberManualRecord,
                 primaryContainerColor = if (isRecordingActive) {
                     MaterialTheme.colorScheme.error
                 } else {
-                    MaterialTheme.colorScheme.secondaryContainer
+                    MaterialTheme.colorScheme.primaryContainer
                 },
                 primaryContentColor = if (isRecordingActive) {
                     MaterialTheme.colorScheme.onError
                 } else {
-                    MaterialTheme.colorScheme.onSecondaryContainer
+                    MaterialTheme.colorScheme.onPrimaryContainer
                 },
                 primaryTestTag = "start_screen_record_button",
                 onPrimaryClick = if (isRecordingActive) onStopLiveRecordAndEdit else onStartScreenRecord,
                 secondaryLabel = stringResource(R.string.btn_add_control_center),
                 secondaryIcon = Icons.Filled.DashboardCustomize,
+                secondaryContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                secondaryContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 secondaryTestTag = "add_control_center_tile_button",
                 onSecondaryClick = onAddTileToControlCenter
             )
@@ -604,11 +538,7 @@ private fun ScreenRecordHeroCard(
 }
 
 /**
- * Container-aware adaptive dual button layout:
- * - Uses compact horizontal contentPadding (12.dp) and single-line ellipsis so labels like
- *   "添加至控制中心" and "批量加入队列" never overflow or clip vertically inside pill buttons.
- * - Automatically switches from a horizontal Row to a vertical Column when the card width is
- *   narrow (< 295.dp, e.g. in split-screen, small display, or 2-column medium layout).
+ * Container-aware adaptive dual button layout with generous touch height and strong contrast.
  */
 @Composable
 private fun AdaptiveDualActionButtons(
@@ -620,13 +550,15 @@ private fun AdaptiveDualActionButtons(
     onPrimaryClick: () -> Unit,
     secondaryLabel: String,
     secondaryIcon: ImageVector,
+    secondaryContainerColor: Color,
+    secondaryContentColor: Color,
     secondaryTestTag: String,
     onSecondaryClick: () -> Unit
 ) {
-    val compactPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+    val compactPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val stackVertically = maxWidth < 295.dp
+        val stackVertically = maxWidth < 300.dp
 
         if (stackVertically) {
             Column(
@@ -637,7 +569,7 @@ private fun AdaptiveDualActionButtons(
                     onClick = onPrimaryClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 50.dp)
                         .testTag(primaryTestTag),
                     shape = CircleShape,
                     contentPadding = compactPadding,
@@ -649,9 +581,9 @@ private fun AdaptiveDualActionButtons(
                     Icon(
                         imageVector = primaryIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(7.dp))
                     Text(
                         text = primaryLabel,
                         style = MaterialTheme.typography.labelLarge,
@@ -665,17 +597,21 @@ private fun AdaptiveDualActionButtons(
                     onClick = onSecondaryClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 50.dp)
                         .testTag(secondaryTestTag),
                     shape = CircleShape,
-                    contentPadding = compactPadding
+                    contentPadding = compactPadding,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = secondaryContainerColor,
+                        contentColor = secondaryContentColor
+                    )
                 ) {
                     Icon(
                         imageVector = secondaryIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(7.dp))
                     Text(
                         text = secondaryLabel,
                         style = MaterialTheme.typography.labelLarge,
@@ -695,7 +631,7 @@ private fun AdaptiveDualActionButtons(
                     onClick = onPrimaryClick,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 50.dp)
                         .testTag(primaryTestTag),
                     shape = CircleShape,
                     contentPadding = compactPadding,
@@ -707,9 +643,9 @@ private fun AdaptiveDualActionButtons(
                     Icon(
                         imageVector = primaryIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(7.dp))
                     Text(
                         text = primaryLabel,
                         style = MaterialTheme.typography.labelLarge,
@@ -723,17 +659,21 @@ private fun AdaptiveDualActionButtons(
                     onClick = onSecondaryClick,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 50.dp)
                         .testTag(secondaryTestTag),
                     shape = CircleShape,
-                    contentPadding = compactPadding
+                    contentPadding = compactPadding,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = secondaryContainerColor,
+                        contentColor = secondaryContentColor
+                    )
                 ) {
                     Icon(
                         imageVector = secondaryIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(7.dp))
                     Text(
                         text = secondaryLabel,
                         style = MaterialTheme.typography.labelLarge,
@@ -748,6 +688,81 @@ private fun AdaptiveDualActionButtons(
 }
 
 @Composable
+private fun CompactLibraryShortcutCard(
+    recordingsCount: Int,
+    onOpenGallery: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .clickable(onClick = onOpenGallery)
+            .testTag("home_open_gallery_button"),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesomeMotion,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "最近作品",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (recordingsCount > 0) {
+                            "作品库已有 $recordingsCount 段录屏原片"
+                        } else {
+                            "导出的 GIF 与录屏原片会保存在作品库"
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "进入作品库",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun RecentCreationsSection(
     creations: List<GifCreationEntity>,
     onShareCreation: (GifCreationEntity) -> Unit,
@@ -755,14 +770,17 @@ private fun RecentCreationsSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "最近作品",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
             )
 
             Surface(
@@ -781,14 +799,16 @@ private fun RecentCreationsSection(
                 ) {
                     Text(
                         text = "全部 (${creations.size})",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = MaterialTheme.colorScheme.primary
                     )
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
@@ -803,16 +823,15 @@ private fun RecentCreationsSection(
                     modifier = Modifier
                         .width(196.dp)
                         .testTag("recent_gif_card_${item.id}"),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(124.dp)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(16.dp))
                         ) {
                             AnimatedGifPlayer(
                                 gifFilePath = item.filePath,
@@ -830,7 +849,9 @@ private fun RecentCreationsSection(
                             ) {
                                 Text(
                                     text = formatFileSize(item.fileSizeBytes),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFeatureSettings = "tnum"
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
@@ -854,7 +875,9 @@ private fun RecentCreationsSection(
                                 )
                                 Text(
                                     text = "${item.width}×${item.height} · ${item.fps} FPS",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFeatureSettings = "tnum"
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -911,7 +934,7 @@ private fun CountdownOverlay(secondsLeft: Int) {
                 Text(
                     text = secondsLeft.toString(),
                     style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             }
