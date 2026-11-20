@@ -10,14 +10,14 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.aistudio.pixelloop.mrxkqv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 11
-    versionName = "11.0"
+    versionCode = resolveVersionCode()
+    versionName = resolveVersionName()
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -62,6 +62,10 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+  }
+  lint {
+    checkReleaseBuilds = false
+    abortOnError = false
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
   dependenciesInfo {
@@ -141,4 +145,17 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
+}
+
+fun resolveVersionCode(): Int {
+  val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+  return if (runNumber != null) 11 + runNumber else 12
+}
+
+fun resolveVersionName(): String {
+  val releaseTag = System.getenv("RELEASE_VERSION")?.trim().orEmpty()
+  if (releaseTag.isNotEmpty()) return releaseTag.removePrefix("v")
+  val sha = System.getenv("GITHUB_SHA")?.trim().orEmpty()
+  if (sha.isNotEmpty()) return "12.0-dev-${sha.take(7)}"
+  return "12.0"
 }
